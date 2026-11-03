@@ -1,4 +1,4 @@
-# 🏝️ Windows Dynamic Island
+# Windows Dynamic Island
 
 <div align="center">
 
