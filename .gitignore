@@ -16,6 +16,7 @@ dist/
 *.bak
 *.tmp
 *.cache
+*.json
 
 ## OS generated files
 Thumbs.db
