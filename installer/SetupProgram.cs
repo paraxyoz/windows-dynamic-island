@@ -31,7 +31,7 @@ namespace WindowsDynamicIslandSetup
 
             if (args != null && args.Any(a => string.Equals(a, "--silent", StringComparison.OrdinalIgnoreCase)))
             {
-                PerformInstall(defaultDir, createDesktopShortcut: true, enableAutoStart: true, launchNow: false);
+                PerformInstall(defaultDir, createDesktopShortcut: true, enableAutoStart: true, launchNow: true);
                 return 0;
             }
 
@@ -47,8 +47,8 @@ namespace WindowsDynamicIslandSetup
             var win = new Window
             {
                 Title = "Установка Windows Dynamic Island",
-                Width = 530,
-                Height = 360,
+                Width = 550,
+                Height = 390,
                 WindowStartupLocation = WindowStartupLocation.CenterScreen,
                 WindowStyle = WindowStyle.None,
                 AllowsTransparency = true,
@@ -79,16 +79,25 @@ namespace WindowsDynamicIslandSetup
                 Padding = new Thickness(24)
             };
 
-            shell.MouseLeftButtonDown += (s, e) =>
-            {
-                if (e.ButtonState == MouseButtonState.Pressed) win.DragMove();
-            };
-
             var stack = new StackPanel();
 
-            var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 16) };
+            // Header Row (Grabbable for window moving, containing logo, titles, and close button)
+            var headerGrid = new Grid
+            {
+                Margin = new Thickness(0, 0, 0, 14),
+                Background = Brushes.Transparent
+            };
             headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            headerGrid.MouseLeftButtonDown += (s, e) =>
+            {
+                if (e.ButtonState == MouseButtonState.Pressed && !(e.OriginalSource is Button) && !(e.OriginalSource is TextBox))
+                {
+                    try { win.DragMove(); } catch { }
+                }
+            };
 
             try
             {
@@ -131,7 +140,7 @@ namespace WindowsDynamicIslandSetup
                 CornerRadius = new CornerRadius(12),
                 Padding = new Thickness(10, 3, 10, 3),
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(0, 0, 0, 6),
+                Margin = new Thickness(0, 0, 0, 4),
                 Child = new TextBlock
                 {
                     Text = "^_^  •  Windows Dynamic Island Beta",
@@ -153,6 +162,32 @@ namespace WindowsDynamicIslandSetup
             });
 
             headerGrid.Children.Add(titleCol);
+
+            // Close (X) button in header
+            var closeBtn = new Border
+            {
+                Width = 28,
+                Height = 28,
+                CornerRadius = new CornerRadius(14),
+                Background = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Child = new TextBlock
+                {
+                    Text = "✕",
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 190)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+            closeBtn.MouseEnter += (s, e) => closeBtn.Background = new SolidColorBrush(Color.FromArgb(45, 255, 255, 255));
+            closeBtn.MouseLeave += (s, e) => closeBtn.Background = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255));
+            closeBtn.MouseLeftButtonUp += (s, e) => win.Close();
+            Grid.SetColumn(closeBtn, 2);
+            headerGrid.Children.Add(closeBtn);
+
             stack.Children.Add(headerGrid);
 
             stack.Children.Add(new TextBlock
@@ -162,27 +197,66 @@ namespace WindowsDynamicIslandSetup
                 FontSize = 12,
                 Foreground = new SolidColorBrush(Color.FromRgb(161, 161, 170)),
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 14)
+                Margin = new Thickness(0, 0, 0, 12)
             });
 
-            var pathBox = new Border
+            // Path Selection Row
+            var pathLabel = new TextBlock
             {
-                Background = new SolidColorBrush(Color.FromRgb(26, 26, 30)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(45, 45, 52)),
+                Text = "Папка установки:",
+                FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI"),
+                FontSize = 12,
+                FontWeight = FontWeights.Medium,
+                Foreground = new SolidColorBrush(Color.FromRgb(210, 210, 220)),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            stack.Children.Add(pathLabel);
+
+            var pathRow = new Grid { Margin = new Thickness(0, 0, 0, 12) };
+            pathRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            pathRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var pathTextBox = new TextBox
+            {
+                Text = targetDir,
+                FontFamily = new FontFamily("Cascadia Mono, Consolas, Segoe UI"),
+                FontSize = 11.5,
+                Foreground = new SolidColorBrush(Color.FromRgb(230, 230, 235)),
+                Background = new SolidColorBrush(Color.FromRgb(26, 26, 32)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(55, 55, 65)),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(10, 7, 10, 7),
-                Margin = new Thickness(0, 0, 0, 12),
-                Child = new TextBlock
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(pathTextBox, 0);
+            pathRow.Children.Add(pathTextBox);
+
+            var browseBtn = CreateStyledButton("Обзор...", Color.FromRgb(38, 38, 46), Color.FromRgb(220, 220, 230), 12, new Thickness(14, 7, 14, 7));
+            browseBtn.Margin = new Thickness(8, 0, 0, 0);
+            browseBtn.Click += (s, e) =>
+            {
+                try
                 {
-                    Text = targetDir,
-                    FontFamily = new FontFamily("Cascadia Mono, Consolas"),
-                    FontSize = 11.5,
-                    Foreground = new SolidColorBrush(Color.FromRgb(210, 210, 218)),
-                    TextTrimming = TextTrimming.CharacterEllipsis
+                    using (var fbd = new System.Windows.Forms.FolderBrowserDialog())
+                    {
+                        fbd.Description = "Выберите папку для установки Windows Dynamic Island";
+                        fbd.SelectedPath = Directory.Exists(pathTextBox.Text) ? pathTextBox.Text : targetDir;
+                        fbd.ShowNewFolderButton = true;
+                        if (fbd.ShowDialog() == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath))
+                        {
+                            pathTextBox.Text = fbd.SelectedPath;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Ошибка при открытии проводника: " + ex.Message, "Windows Dynamic Island", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             };
-            stack.Children.Add(pathBox);
+            Grid.SetColumn(browseBtn, 1);
+            pathRow.Children.Add(browseBtn);
+
+            stack.Children.Add(pathRow);
 
             var cbShortcut = new CheckBox
             {
@@ -203,42 +277,23 @@ namespace WindowsDynamicIslandSetup
 
             var btnRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
 
-            var cancelBtn = new Border
-            {
-                Background = new SolidColorBrush(Color.FromRgb(35, 35, 40)),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(16, 8, 16, 8),
-                Margin = new Thickness(0, 0, 10, 0),
-                Cursor = Cursors.Hand,
-                Child = new TextBlock
-                {
-                    Text = "Отмена",
-                    Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 226)),
-                    FontSize = 13
-                }
-            };
-            cancelBtn.MouseLeftButtonUp += (s, e) => win.Close();
+            var cancelBtn = CreateStyledButton("Отмена", Color.FromRgb(35, 35, 42), Color.FromRgb(220, 220, 226), 13, new Thickness(18, 9, 18, 9));
+            cancelBtn.Margin = new Thickness(0, 0, 10, 0);
+            cancelBtn.Click += (s, e) => win.Close();
 
-            var installText = new TextBlock
+            var installBtn = CreateStyledButton("Установить и запустить", Color.FromRgb(167, 139, 250), Color.FromRgb(10, 10, 14), 13, new Thickness(22, 9, 22, 9), isPrimary: true);
+            installBtn.Click += (s, e) =>
             {
-                Text = "Установить и запустить",
-                Foreground = new SolidColorBrush(Color.FromRgb(10, 10, 14)),
-                FontWeight = FontWeights.SemiBold,
-                FontSize = 13
-            };
-            var installBtn = new Border
-            {
-                Background = new SolidColorBrush(Color.FromRgb(167, 139, 250)),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(20, 8, 20, 8),
-                Cursor = Cursors.Hand,
-                Child = installText
-            };
-            installBtn.MouseLeftButtonUp += (s, e) =>
-            {
-                installText.Text = "Установка...";
+                string chosenPath = pathTextBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(chosenPath))
+                {
+                    MessageBox.Show("Пожалуйста, укажите путь для установки.", "Windows Dynamic Island", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 installBtn.IsEnabled = false;
-                PerformInstall(targetDir, cbShortcut.IsChecked == true, cbAutoStart.IsChecked == true, launchNow: true);
+                installBtn.Content = "Установка...";
+                PerformInstall(chosenPath, cbShortcut.IsChecked == true, cbAutoStart.IsChecked == true, launchNow: true);
                 win.Close();
             };
 
@@ -251,10 +306,54 @@ namespace WindowsDynamicIslandSetup
             return win;
         }
 
+        private static Button CreateStyledButton(string text, Color bg, Color fg, double fontSize, Thickness padding, bool isPrimary = false)
+        {
+            var btn = new Button
+            {
+                Content = text,
+                FontSize = fontSize,
+                Foreground = new SolidColorBrush(fg),
+                FontWeight = isPrimary ? FontWeights.SemiBold : FontWeights.Normal,
+                Cursor = Cursors.Hand,
+                BorderThickness = new Thickness(0),
+                Background = Brushes.Transparent,
+                Padding = padding
+            };
+
+            var template = new ControlTemplate(typeof(Button));
+            var fef = new FrameworkElementFactory(typeof(Border));
+            fef.Name = "border";
+            fef.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
+            fef.SetValue(Border.BackgroundProperty, new SolidColorBrush(bg));
+            fef.SetValue(Border.PaddingProperty, padding);
+
+            var cp = new FrameworkElementFactory(typeof(ContentPresenter));
+            cp.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            fef.AppendChild(cp);
+
+            var triggerIsMouseOver = new Trigger { Property = Button.IsMouseOverProperty, Value = true };
+            Color hoverColor = isPrimary ? Color.FromRgb(192, 168, 255) : Color.FromRgb(50, 50, 60);
+            triggerIsMouseOver.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(hoverColor), "border"));
+
+            var triggerIsPressed = new Trigger { Property = Button.IsPressedProperty, Value = true };
+            Color pressColor = isPrimary ? Color.FromRgb(140, 110, 230) : Color.FromRgb(28, 28, 34);
+            triggerIsPressed.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(pressColor), "border"));
+
+            template.VisualTree = fef;
+            template.Triggers.Add(triggerIsMouseOver);
+            template.Triggers.Add(triggerIsPressed);
+            btn.Template = template;
+
+            return btn;
+        }
+
         private static void PerformInstall(string installDir, bool createDesktopShortcut, bool enableAutoStart, bool launchNow)
         {
             try
             {
+                installDir = Path.GetFullPath(installDir);
+
                 foreach (var p in Process.GetProcessesByName("WindowsDynamicIsland"))
                 {
                     try { p.Kill(); p.WaitForExit(1500); } catch { }
