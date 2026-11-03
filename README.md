@@ -11,154 +11,142 @@
 
 <br/>
 
-**Элегантный, молниеносный и функциональный «Динамический остров» для Windows 10 и 11 в стиле Apple Dynamic Island и ультрасовременной эстетике iOS 26 Liquid Glass.**
+**A lightweight, native, and high-performance Dynamic Island interface for Windows 10 and Windows 11.**
 
-[Скачать установщик (.exe)](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) • [Портативная версия](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) • [Возможности](#-основные-возможности) • [Горячие клавиши](#-горячие-клавиши) • [Сборка](#-сборка-из-исходников)
-
-<br/>
-
-<img src="assets/screenshots/capsule_ios26.png" alt="Windows Dynamic Island в спокойном состоянии (iOS 26 Glass)" width="680" />
+[Download Installer (.exe)](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) | [Portable Version](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) | [Features](#key-features) | [Hotkeys](#default-hotkeys) | [Build Guide](#building-from-source) | [Документация на русском](README.ru.md)
 
 <br/>
 
-<img src="assets/screenshots/home_ios26.png" alt="Windows Dynamic Island — Главное меню (iOS 26 Liquid Glass)" width="780" />
+<img src="assets/screenshots/capsule_dark.png" alt="Windows Dynamic Island in collapsed state" width="420" />
+
+<br/>
+
+<img src="assets/screenshots/home_dark.png" alt="Windows Dynamic Island Dark Theme" width="760" />
 
 </div>
 
 ---
 
-## 🌟 Почему Windows Dynamic Island?
+## Overview
 
-В отличие от громоздких веб-оболочек на Electron, **Windows Dynamic Island** написан на чистом C# и нативном **WPF (.NET Framework 4.8)** с прямым вызовом Win32 / CoreAudio / Windows Runtime API:
-- **0% нагрузки на процессор** и видеокарту в состоянии покоя.
-- **Потребление ОЗУ всего ~20–30 МБ**.
-- **100% клик-сквозь (`HTTRANSPARENT`)** — остров нигде не блокирует клики мыши вне активной капсулы; окна под ним свободно нажимаются и скроллятся.
-- **Умное скрытие в полноэкранных играх и фильмах** с отслеживанием именно того монитора, на котором запущен остров.
-- **Поддержка любых DPI-масштабов и нескольких мониторов** с авто-подгонкой положения.
+**Windows Dynamic Island** is built using native **C# and WPF (.NET Framework 4.8)** with low-level Win32, Windows Runtime, and CoreAudio COM integrations:
+
+- **Ultra-low Resource Footprint:** Consumes ~20–25 MB of RAM and 0% CPU/GPU cycles when idle.
+- **Hardware-Accelerated Animation Engine:** Frame-locked 120 FPS+ spring physics without layout stutter.
+- **True Click-Through Transparency (`HTTRANSPARENT`):** Only the active capsule consumes pointer events. Underlying windows remain fully clickable and scrollable.
+- **Fullscreen Application Detection:** Automatically hides during full-screen games and media playback, scoped per-monitor.
+- **Multi-Monitor & DPI Aware:** Dynamically positions and scales across multiple displays and varying display scaling factors.
 
 ---
 
-## 📸 Галерея скриншотов
+## Visual Themes
 
 <div align="center">
 
-### 💎 Тема iOS 26 Liquid Glass & Тёмная OLED
-| Тема iOS 26 Liquid Glass | Тёмная тема (OLED Dark) |
+| Dark Theme (OLED Black) | Light Theme |
 | :---: | :---: |
-| <img src="assets/screenshots/home_ios26.png" width="400" /> | <img src="assets/screenshots/home_dark.png" width="400" /> |
-
-### 📝 Заметки: Отдельный список карточек & Редактор с напоминаниями
-| Список отдельных заметок (Поиск, Пин, Быстрое выключение ✕) | Редактор выбранной заметки (+5м, +15м, +1ч, ЧЧ:ММ) |
-| :---: | :---: |
-| <img src="assets/screenshots/notes_list.png" width="400" /> | <img src="assets/screenshots/note_editor.png" width="400" /> |
-
-### 🔔 Мелодии уведомлений & 📋 Умный буфер обмена
-| Выбор звука уведомлений (Apple Pay, Plum, Trum, Phonk) | Буфер обмена с защитой токенов и OLE Drag & Drop |
-| :---: | :---: |
-| <img src="assets/screenshots/settings_sound.png" width="400" /> | <img src="assets/screenshots/clipboard.png" width="400" /> |
-
-### 📂 Файловая полка & 🌤 Реальная погода
-| Файловая полка (Drag & Drop ссылки без дублирования) | Прогноз погоды Open-Meteo (24ч и 7 дней) |
-| :---: | :---: |
-| <img src="assets/screenshots/file_shelf.png" width="400" /> | <img src="assets/screenshots/weather.png" width="400" /> |
+| <img src="assets/screenshots/home_dark.png" width="380" /> | <img src="assets/screenshots/home_light.png" width="380" /> |
+| <img src="assets/screenshots/capsule_dark.png" width="380" /> | <img src="assets/screenshots/capsule_light.png" width="380" /> |
 
 </div>
 
 ---
 
-## ✨ Основные возможности
+## Key Features
 
-### 1. 💧 Спокойное состояние и адаптивный мениск
-- **Капля-мениск:** Прилипает к верхней кромке экрана с плавными вогнутыми ушками, рассчитанными по математическим кубическим кривым Безье.
-- **Живой смайлик-компаньон:** 5 вариантов чисто текстовых каомодзи (`^_^`, `•ᴗ•`, `[•_•]`, `=^..^=`, `◕‿◕`). Реагирует на звук, переключение языков, копирование файлов, без навязчивости.
-- **Приятный ритм музыки:** При воспроизведении музыки смайлик мягко кивает в такт со стабильной ноткой `♪ ^_^`, без резких прыжков.
-- **Часы и погода:** Точное системное время и текущая погода за окном прямо в центре капсулы.
+### 1. Collapsed State & Adaptive Meniscus
+- **Seamless Drop Extrusion:** Attaches to the top edge of the primary or selected screen with cubic Bezier curves.
+- **Companion Status Glyph:** Lightweight text-based kaomoji indicators (`^_^`, `•ᴗ•`, `[•_•]`, `=^..^=`, `◕‿◕`) reflecting audio state, layout toggles, and notification alerts.
+- **Live Clock & Weather:** High-precision monospace clock display alongside real-time outdoor temperature.
 
-### 2. ⚡ Быстрые тосты и приоритетная очередь уведомлений
-- **Плавное вытеснение без задержек:** Быстрые действия (переключение музыки Play/Pause, смена трека, изменение громкости) мгновенно сменяют друг друга без зависания в долгой очереди.
-- **Регулировка громкости без мерцания:** Плавный градиентный ползунок откликается на системное колесо громкости с квадратичным сглаживанием 65 мс.
-- **Интерактивные напоминания:** Напоминания по заметкам можно закрыть в один клик кнопкой **«Выполнено ✓»** или отложить кнопкой **«Отложить +5м»**.
-- **Новые приятные мелодии:** Встроенные чистые звуки (`Apple Pay`, `Plum`, `Trum`, `Phonk`) с предпрослушкой в настройках.
+### 2. Transient Notification Toasts
+- **Preemptive Event Dispatching:** High-frequency actions (volume adjustments, media play/pause, track changes) preempt active toasts immediately without queuing delays.
+- **Flicker-Free Hardware Volume:** Smooth quadratic easing on volume change notifications.
+- **Notification Sounds:** Built-in clean audio presets (`Apple Pay`, `Plum`, `Trum`, `Phonk`) with an instant preview button in settings.
+- **Interactive Action Buttons:** Note reminders can be marked completed or snoozed directly from the toast layer.
 
-### 3. 📝 Полноценный рабочий стол заметок
-- **Каждая заметка отдельно:** Чистый вертикальный список карточек с временем обновления, статусом закрепления и превью текста.
-- **Управление напоминаниями в 1 клик:** Зелёная капсула `🔔 18:30 ✕` прямо в карточке заметки отключает напоминание без захода внутрь.
-- **Детальный редактор:** Открывается по клику на карточку заметки — заголовок, многострочный текст, кнопки быстрых сдвигов `+5м`, `+15м`, `+1ч` и точный ввод `ЧЧ:ММ`.
+### 3. Dedicated Notes Workspace
+- **Card-Based Note Management:** Structured vertical card list with live search, pin toggles, and timestamps.
+- **One-Click Reminder Controls:** Quick toggles for reminders (`+5m`, `+15m`, `+1h`, and custom time entry `HH:mm`) with a direct disable action (`✕`).
+- **Real-Time Auto-Save:** Changes are persisted atomically with automated recovery backups.
 
-### 4. 📋 Умный буфер обмена с защитой приватности
-- **Автоматический сбор истории:** Мгновенный перехват через Win32 API без фонового поллинга.
-- **Фильтрация паролей:** Автоматически отсекает мастер-пароли, пароли из 1Password/Bitwarden и секретные токены (`sk-...`, `ghp_...`).
-- **OLE Drag & Drop:** Вы можете перетащить запись мышью прямо в поле ввода Telegram, Discord, Word или браузер.
+### 4. Privacy-Focused Clipboard History
+- **Automatic History Tracking:** Captures text clipboard changes via `WM_CLIPBOARDUPDATE`.
+- **Credential & Token Filter:** Automatically ignores sensitive data (passwords, tokens, API keys matching `sk-...`, `ghp_...`).
+- **Native OLE Drag & Drop:** Drag clipboard items directly into applications, editors, Discord, or Telegram.
 
-### 5. 📁 Файловая полка (Shelf)
-- Перетаскивайте файлы и папки прямо на капсулу — полка создаёт лёгкие ссылки без копирования и не тратит место на диске.
-- Быстрый доступ к документам и проектам из любого полноэкранного окна.
+### 5. File Shelf
+- **Non-Destructive Referencing:** Drag files onto the island to create temporary staging links without duplicating files on disk.
+- **Cross-Application Drag & Drop:** Drag files directly from the shelf back into Explorer, chat clients, or browsers.
 
-### 6. ⏱ Таймер и мульти-секундомер
-- Быстрые пресеты `1м`, `5м`, `10м`, `25м` (Pomodoro).
-- Таймер выводит оставшееся время прямо в свёрнутую капсулу острова.
-- Секундомер с фиксацией промежуточных кругов (Laps).
+### 6. Time Instruments
+- **Countdown Timer:** Quick duration presets (`1m`, `5m`, `10m`, `25m`) with live countdown projected into the collapsed capsule.
+- **Stopwatch:** High-resolution split and cumulative lap tracking.
 
-### 7. 🌤 Погода без API-ключей
-- Интеграция с открытым метео-сервером Open-Meteo.
-- Поиск любых городов мира, почасовой прогноз на 24 часа и недельный прогноз.
+### 7. Weather Integration
+- **Open-Meteo REST API:** Real-time meteorological data with zero API key requirement.
+- **Forecasts:** 24-hour hourly trend and 7-day extended forecasts with offline caching.
 
 ---
 
-## ⌨️ Горячие клавиши
+## Default Hotkeys
 
-| Сочетание клавиш | Действие |
+| Key Combination | Action |
 | :--- | :--- |
-| <kbd>Alt</kbd> + <kbd>Space</kbd> | Развернуть / свернуть Dynamic Island |
-| <kbd>Alt</kbd> + <kbd>N</kbd> | Открыть компактную быструю заметку (или раздел Заметок) |
-| <kbd>Alt</kbd> + <kbd>B</kbd> | Мгновенно открыть историю буфера обмена |
+| `Alt + Space` | Expand / collapse Dynamic Island (or reveal if hidden) |
+| `Alt + N` | Open Quick Note / Notes section |
+| `Alt + B` | Open Clipboard History |
 
 ---
 
-## 🚀 Установка
+## Installation
 
-### Вариант 1: Автономный инсталлятор (Рекомендуется)
-1. Скачайте **[`WindowsDynamicIslandSetup.exe`](https://github.com/paraxyoz/windows-dynamic-island/releases/latest)** из раздела [Releases](https://github.com/paraxyoz/windows-dynamic-island/releases).
-2. Запустите установщик. Он автоматически установит приложение, создаст ярлыки в меню Пуск и настроит автозапуск по желанию.
-3. *Для тихой автоматической установки:*
+### Installer (Recommended)
+1. Download **`WindowsDynamicIslandSetup.exe`** from [Releases](https://github.com/paraxyoz/windows-dynamic-island/releases/latest).
+2. Run the executable to install the application, create Start Menu shortcuts, and optionally register startup.
+3. For silent automated deployment:
    ```powershell
    .\WindowsDynamicIslandSetup.exe --silent
    ```
 
-### Вариант 2: Портативная версия (Portable)
-1. Скачайте **[`WindowsDynamicIsland.exe`](https://github.com/paraxyoz/windows-dynamic-island/releases/latest)**.
-2. Поместите в любую удобную папку и запустите. Никаких реестров и внешних зависимостей — всё работает из коробки.
+### Portable Executable
+1. Download **`WindowsDynamicIsland.exe`** from [Releases](https://github.com/paraxyoz/windows-dynamic-island/releases/latest).
+2. Place the executable in any directory and launch directly. No registry changes or external dependencies are required.
 
 ---
 
-## 🛠️ Сборка из исходников
+## Building from Source
 
-Для сборки требуется Windows 10/11 и Visual Studio Build Tools / MSBuild:
+### Prerequisites
+- Windows 10 (version 1903+) or Windows 11 (x64)
+- .NET Framework 4.8 Developer Pack
+- MSBuild (Visual Studio 2019/2022 or Build Tools)
 
+### Build Steps
 ```powershell
-# Клонируйте репозиторий
+# Clone the repository
 git clone https://github.com/paraxyoz/windows-dynamic-island.git
 cd windows-dynamic-island
 
-# Запустите скрипт компиляции и прогона тестов
+# Compile binaries and execute unit tests
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-Скрипт автоматически:
-1. Компилирует проект в конфигурации `Release x64`.
-2. Запускает 9/9 автоматических модульных тестов (`WindowsDynamicIsland.Tests.exe`).
-3. Собирает установщик `WindowsDynamicIslandSetup.exe` в папку `dist/`.
+The build script will:
+1. Compile `src/WindowsDynamicIsland` in `Release x64` configuration.
+2. Run automated verification tests (`WindowsDynamicIsland.Tests.exe`).
+3. Compile the standalone setup installer into `dist/`.
 
 ---
 
-## 🔍 Поисковые теги / SEO Keywords
+## Search Indexing & Tags
 
-`windows dynamic island`, `dynamic island for windows 11`, `динамический остров виндовс`, `apple dynamic island pc`, `windows 11 customization`, `glassmorphism widget windows`, `wpf dynamic island`, `desktop productivity tool`, `clipboard manager windows 11`, `ios 26 glass widget`, `windows остров виджет`, `динамический остров на пк`.
+`windows dynamic island`, `dynamic island windows 11`, `dynamic island pc`, `wpf dynamic island`, `windows 11 desktop widget`, `csharp wpf desktop tool`, `desktop productivity utility`, `clipboard manager windows`, `windows 10 customization`.
 
 ---
 
-## 📄 Лицензия
+## License
 
-Проект распространяется под свободной и открытой лицензией [MIT](LICENSE). Разработано с душой и вниманием к деталям.
+This project is licensed under the [MIT License](LICENSE).
 
-**Автор:** [@paraxyoz](https://github.com/paraxyoz)
+Developed by [@paraxyoz](https://github.com/paraxyoz).
