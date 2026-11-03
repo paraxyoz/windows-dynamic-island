@@ -1,0 +1,25 @@
+## Visual Studio & Build artifacts
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+## Distributable binaries (stored in GitHub Releases)
+dist/
+
+## Temporary files & logs
+*.log
+*.bak
+*.tmp
+*.cache
+
+## OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
