@@ -176,6 +176,17 @@ namespace WindowsDynamicIsland.UI
             Background = Brushes.Transparent;
             ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false;
+            try
+            {
+                string icoFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+                if (System.IO.File.Exists(icoFile))
+                {
+                    Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri(icoFile, UriKind.Absolute));
+                }
+            }
+            catch
+            {
+            }
             Topmost = true;
             UseLayoutRounding = true;
             SnapsToDevicePixels = true;
@@ -2695,6 +2706,25 @@ namespace WindowsDynamicIsland.UI
 
             HwndSource source = HwndSource.FromHwnd(_hwnd);
             source?.AddHook(WndProc);
+
+            try
+            {
+                string icoFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+                if (System.IO.File.Exists(icoFile))
+                {
+                    using (var icoBig = new System.Drawing.Icon(icoFile, 32, 32))
+                    {
+                        NativeMethods.SendMessage(_hwnd, (uint)NativeMethods.WM_SETICON, (IntPtr)NativeMethods.ICON_BIG, icoBig.Handle);
+                    }
+                    using (var icoSmall = new System.Drawing.Icon(icoFile, 16, 16))
+                    {
+                        NativeMethods.SendMessage(_hwnd, (uint)NativeMethods.WM_SETICON, (IntPtr)NativeMethods.ICON_SMALL, icoSmall.Handle);
+                    }
+                }
+            }
+            catch
+            {
+            }
 
             NativeMethods.AddClipboardFormatListener(_hwnd);
             RegisterGlobalHotkeys();

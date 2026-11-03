@@ -3,16 +3,24 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 
 namespace WindowsDynamicIslandSetup
 {
     public static class SetupProgram
     {
+        [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+        private const int SHCNE_ASSOCCHANGED = 0x08000000;
+        private const int SHCNF_IDLIST = 0x0000;
+
         [STAThread]
         public static int Main(string[] args)
         {
@@ -39,8 +47,8 @@ namespace WindowsDynamicIslandSetup
             var win = new Window
             {
                 Title = "Установка Windows Dynamic Island",
-                Width = 520,
-                Height = 350,
+                Width = 530,
+                Height = 360,
                 WindowStartupLocation = WindowStartupLocation.CenterScreen,
                 WindowStyle = WindowStyle.None,
                 AllowsTransparency = true,
@@ -48,10 +56,24 @@ namespace WindowsDynamicIslandSetup
                 ResizeMode = ResizeMode.NoResize
             };
 
+            try
+            {
+                using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("Payload.app.ico"))
+                {
+                    if (s != null)
+                    {
+                        win.Icon = BitmapFrame.Create(s);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
             var shell = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(18, 18, 21)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(42, 42, 48)),
+                Background = new SolidColorBrush(Color.FromRgb(18, 18, 22)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(48, 48, 56)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(16),
                 Padding = new Thickness(24)
@@ -64,48 +86,88 @@ namespace WindowsDynamicIslandSetup
 
             var stack = new StackPanel();
 
+            var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 16) };
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            try
+            {
+                using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("Payload.logo.png"))
+                {
+                    if (s != null)
+                    {
+                        var bi = new BitmapImage();
+                        bi.BeginInit();
+                        bi.StreamSource = s;
+                        bi.CacheOption = BitmapCacheOption.OnLoad;
+                        bi.EndInit();
+                        bi.Freeze();
+
+                        var logoImg = new Image
+                        {
+                            Source = bi,
+                            Width = 52,
+                            Height = 52,
+                            Margin = new Thickness(0, 0, 16, 0),
+                            VerticalAlignment = VerticalAlignment.Center
+                        };
+                        Grid.SetColumn(logoImg, 0);
+                        headerGrid.Children.Add(logoImg);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            var titleCol = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(titleCol, 1);
+
             var pill = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(10, 10, 12)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(38, 38, 44)),
+                Background = new SolidColorBrush(Color.FromRgb(12, 12, 16)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(42, 42, 52)),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(14),
-                Padding = new Thickness(14, 5, 14, 5),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(10, 3, 10, 3),
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(0, 0, 0, 16),
+                Margin = new Thickness(0, 0, 0, 6),
                 Child = new TextBlock
                 {
-                    Text = "^_^  •  Windows Dynamic Island",
+                    Text = "^_^  •  Windows Dynamic Island Beta",
                     FontFamily = new FontFamily("Cascadia Mono, Consolas"),
-                    FontSize = 12,
+                    FontSize = 11,
                     FontWeight = FontWeights.SemiBold,
-                    Foreground = new SolidColorBrush(Color.FromRgb(20, 184, 166))
+                    Foreground = new SolidColorBrush(Color.FromRgb(167, 139, 250))
                 }
             };
-            stack.Children.Add(pill);
+            titleCol.Children.Add(pill);
 
-            stack.Children.Add(new TextBlock
+            titleCol.Children.Add(new TextBlock
             {
                 Text = "Установка Windows Dynamic Island",
                 FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI"),
-                FontSize = 20,
+                FontSize = 19,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(237, 237, 239))
+                Foreground = new SolidColorBrush(Color.FromRgb(240, 240, 244))
             });
+
+            headerGrid.Children.Add(titleCol);
+            stack.Children.Add(headerGrid);
 
             stack.Children.Add(new TextBlock
             {
-                Text = "Интерактивный центр управления Windows 11: системный плеер, буфер обмена с drag-and-drop, файловая полка, заметки, таймеры и живая погода.",
+                Text = "Нативный центр управления для Windows 10 и 11: системный плеер, приватный буфер обмена с drag-and-drop, файловая полка, карточки заметок, таймеры и погода.",
                 FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI"),
-                FontSize = 12.5,
+                FontSize = 12,
                 Foreground = new SolidColorBrush(Color.FromRgb(161, 161, 170)),
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 6, 0, 16)
+                Margin = new Thickness(0, 0, 0, 14)
             });
 
             var pathBox = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(28, 28, 32)),
+                Background = new SolidColorBrush(Color.FromRgb(26, 26, 30)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(45, 45, 52)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
@@ -131,10 +193,10 @@ namespace WindowsDynamicIslandSetup
             };
             var cbAutoStart = new CheckBox
             {
-                Content = "Запускать автоматически вместе с Windows 11",
+                Content = "Запускать автоматически вместе с Windows",
                 IsChecked = true,
                 Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 226)),
-                Margin = new Thickness(0, 0, 0, 18)
+                Margin = new Thickness(0, 0, 0, 16)
             };
             stack.Children.Add(cbShortcut);
             stack.Children.Add(cbAutoStart);
@@ -160,13 +222,13 @@ namespace WindowsDynamicIslandSetup
             var installText = new TextBlock
             {
                 Text = "Установить и запустить",
-                Foreground = new SolidColorBrush(Color.FromRgb(10, 14, 14)),
+                Foreground = new SolidColorBrush(Color.FromRgb(10, 10, 14)),
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 13
             };
             var installBtn = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(20, 184, 166)),
+                Background = new SolidColorBrush(Color.FromRgb(167, 139, 250)),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(20, 8, 20, 8),
                 Cursor = Cursors.Hand,
@@ -175,6 +237,7 @@ namespace WindowsDynamicIslandSetup
             installBtn.MouseLeftButtonUp += (s, e) =>
             {
                 installText.Text = "Установка...";
+                installBtn.IsEnabled = false;
                 PerformInstall(targetDir, cbShortcut.IsChecked == true, cbAutoStart.IsChecked == true, launchNow: true);
                 win.Close();
             };
@@ -194,7 +257,7 @@ namespace WindowsDynamicIslandSetup
             {
                 foreach (var p in Process.GetProcessesByName("WindowsDynamicIsland"))
                 {
-                    try { p.Kill(); p.WaitForExit(1000); } catch { }
+                    try { p.Kill(); p.WaitForExit(1500); } catch { }
                 }
 
                 if (!Directory.Exists(installDir))
@@ -207,6 +270,21 @@ namespace WindowsDynamicIslandSetup
 
                 ExtractResource("Payload.WindowsDynamicIsland.exe", exeTarget);
                 ExtractResource("Payload.app.ico", icoTarget);
+
+                // Extract notification audio files out of the box
+                string soundsDir = Path.Combine(installDir, "Assets", "Sounds");
+                if (!Directory.Exists(soundsDir)) Directory.CreateDirectory(soundsDir);
+                string[] soundFiles = new[] { "applepay.mp3", "phonk.mp3", "plum.mp3", "trum.mp3" };
+                foreach (var sf in soundFiles)
+                {
+                    try
+                    {
+                        ExtractResource("Payload.Sounds." + sf, Path.Combine(soundsDir, sf));
+                    }
+                    catch
+                    {
+                    }
+                }
 
                 if (enableAutoStart)
                 {
@@ -223,6 +301,15 @@ namespace WindowsDynamicIslandSetup
 
                     string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Windows Dynamic Island.lnk");
                     CreateShortcut(startMenu, exeTarget, installDir, icoTarget);
+                }
+
+                // Notify Windows Shell to instantly refresh icon cache for desktop and taskbar
+                try
+                {
+                    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
+                }
+                catch
+                {
                 }
 
                 if (launchNow && File.Exists(exeTarget))
@@ -245,7 +332,7 @@ namespace WindowsDynamicIslandSetup
         {
             using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
             {
-                if (s == null) throw new InvalidOperationException("Не найден ресурс " + resourceName);
+                if (s == null) return;
                 using (FileStream fs = File.Create(destPath))
                 {
                     s.CopyTo(fs);
@@ -263,7 +350,7 @@ namespace WindowsDynamicIslandSetup
                 dynamic shortcut = shell.CreateShortcut(shortcutPath);
                 shortcut.TargetPath = targetExe;
                 shortcut.WorkingDirectory = workDir;
-                shortcut.IconLocation = iconPath;
+                shortcut.IconLocation = iconPath + ",0";
                 shortcut.Description = "Windows Dynamic Island — Центр управления Windows 11";
                 shortcut.Save();
             }

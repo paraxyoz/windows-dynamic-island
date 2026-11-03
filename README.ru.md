@@ -1,19 +1,21 @@
-# Windows Dynamic Island
-
 <div align="center">
 
-[![Release](https://img.shields.io/badge/Релиз-v1.0.0--beta-6366f1?style=for-the-badge&logo=github)](https://github.com/paraxyoz/windows-dynamic-island/releases)
-[![Platform](https://img.shields.io/badge/Платформа-Windows%2010%20%7C%2011%20(x64)-0078d4?style=for-the-badge&logo=windows)](https://github.com/paraxyoz/windows-dynamic-island)
-[![Framework](https://img.shields.io/badge/.NET%20Framework-4.8%20%7C%20WPF-512bd4?style=for-the-badge&logo=dotnet)](https://github.com/paraxyoz/windows-dynamic-island)
-[![Performance](https://img.shields.io/badge/Производительность-120%2B%20FPS%20GPU-10b981?style=for-the-badge&logo=nvidia)](https://github.com/paraxyoz/windows-dynamic-island)
-[![Memory](https://img.shields.io/badge/ОЗУ-~25%20МБ-059669?style=for-the-badge)](https://github.com/paraxyoz/windows-dynamic-island)
-[![License](https://img.shields.io/badge/Лицензия-MIT-amber?style=for-the-badge)](LICENSE)
+<img src="assets/logo.png" alt="Windows Dynamic Island Logo" width="128" />
+
+# Windows Dynamic Island
+
+[![Релиз](https://img.shields.io/badge/Релиз-v1.0.0--beta-6366f1?style=for-the-badge&logo=github)](https://github.com/paraxyoz/windows-dynamic-island/releases)
+[![Платформа](https://img.shields.io/badge/Платформа-Windows%2010%20%7C%2011%20(x64)-0078d4?style=for-the-badge&logo=windows)](https://github.com/paraxyoz/windows-dynamic-island)
+[![Фреймворк](https://img.shields.io/badge/.NET%20Framework-4.8%20%7C%20WPF-512bd4?style=for-the-badge&logo=dotnet)](https://github.com/paraxyoz/windows-dynamic-island)
+[![Скорость](https://img.shields.io/badge/Скорость-120%2B%20FPS%20GPU-10b981?style=for-the-badge&logo=nvidia)](https://github.com/paraxyoz/windows-dynamic-island)
+[![ОЗУ](https://img.shields.io/badge/ОЗУ-~25%20МБ-059669?style=for-the-badge)](https://github.com/paraxyoz/windows-dynamic-island)
+[![Лицензия](https://img.shields.io/badge/Лицензия-MIT-amber?style=for-the-badge)](LICENSE)
 
 <br/>
 
 **Легковесный, нативный и высокопроизводительный «Динамический остров» для Windows 10 и Windows 11.**
 
-[Скачать установщик (.exe)](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) | [Портативная версия](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) | [Возможности](#основные-возможности) | [Горячие клавиши](#горячие-клавиши) | [Сборка](#сборка-из-исходников) | [English Documentation](README.md)
+[Скачать установщик (.exe)](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) | [Возможности](#основные-возможности) | [Горячие клавиши](#горячие-клавиши) | [Сборка](#сборка-из-исходников) | [English Documentation](README.md)
 
 <br/>
 
@@ -29,9 +31,9 @@
 
 ## Обзор
 
-**Windows Dynamic Island** разработан на **C# и WPF (.NET Framework 4.8)** с использованием нативных API Windows (Win32, CoreAudio COM, Windows Media Session):
+**Windows Dynamic Island** разработан на **C# и WPF (.NET Framework 4.8)** с использованием низкоуровневых API Windows (Win32, CoreAudio COM, Windows Media Session):
 
-- **Минимальное потребление ресурсов:** Около 20–25 МБ оперативной памяти и 0% нагрузки на CPU/GPU в покое.
+- **Минимальное потребление ресурсов:** Около 20–25 МБ оперативной памяти и 0% нагрузки на процессор и видеокарту в покое.
 - **Аппаратная пружинная физика:** Стабильные 120+ FPS без рывков интерфейса.
 - **Сквозные клики (`HTTRANSPARENT`):** Только активная капсула перехватывает клики мыши. Все окна под ней остаются кликабельными.
 - **Автоматическое скрытие в полноэкранных приложениях:** Скрывается при запуске игр и полноэкранного видео на текущем мониторе.
@@ -103,15 +105,11 @@
 
 ### Автономный инсталлятор (Рекомендуется)
 1. Скачайте **`WindowsDynamicIslandSetup.exe`** со страницы [Releases](https://github.com/paraxyoz/windows-dynamic-island/releases/latest).
-2. Запустите установщик. Он установит программу и создаст ярлыки в меню Пуск.
-3. Для тихой установки:
+2. Запустите установщик. Он автоматически распакует приложение, звуки уведомлений, создаст ярлыки с иконкой на Рабочем столе и в меню Пуск, и настроит автозагрузку.
+3. Для тихой установки без окон:
    ```powershell
    .\WindowsDynamicIslandSetup.exe --silent
    ```
-
-### Портативная версия
-1. Скачайте **`WindowsDynamicIsland.exe`** со страницы [Releases](https://github.com/paraxyoz/windows-dynamic-island/releases/latest).
-2. Поместите файл в любую папку и запустите. Никаких реестров или внешних библиотек не требуется.
 
 ---
 

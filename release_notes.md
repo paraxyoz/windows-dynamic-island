@@ -6,14 +6,14 @@ Public beta release of **Windows Dynamic Island** — a lightweight, native, and
 
 ### Downloads
 
-- **`WindowsDynamicIslandSetup.exe`** — Standalone installer with Start Menu shortcuts and optional auto-start registration (recommended).
-- **`WindowsDynamicIsland.exe`** — Portable executable (no installation required, run from any folder).
+- **`WindowsDynamicIslandSetup.exe`** — Complete standalone installer providing the application, sound presets, desktop & start menu shortcuts, and autostart registration out-of-the-box.
 
 ---
 
 ### Highlights
 
-#### Native Architecture & Visual Themes
+#### Brand Icon & Visual Themes
+- **New Squircle Visual Identity:** Custom glowing squircle icon applied to the application, setup installer, taskbar tray, and desktop shortcuts.
 - **Adaptive Meniscus:** Seamless drop extrusion attaching to the top screen edge with cubic Bezier curves and corner smoothing.
 - **Two Visual Themes:** OLED Dark Theme and Clean Light Theme.
 - **Hardware-Accelerated Physics:** 120 FPS+ spring animation engine with smooth transitions between collapsed, toast, and expanded workspaces.
@@ -24,8 +24,8 @@ Public beta release of **Windows Dynamic Island** — a lightweight, native, and
 - **One-Click Reminder Toggles:** Fast reminder cancellation directly in the list view (`X`) or reminder adjustments (`+5m`, `+15m`, `+1h`, `HH:mm`) in the editor.
 - **Automatic Recovery:** Atomic disk persistence with backup redundancy.
 
-#### Modern Notification Sounds
-- Audio presets: **Apple Pay**, **Plum**, **Trum**, and **Phonk** (Apple Pay set as default).
+#### Modern Notification Sounds (Out-of-the-Box)
+- Built-in audio presets: **Apple Pay**, **Plum**, **Trum**, and **Phonk** (Apple Pay set as default).
 - Instant preview playback directly in **Settings**.
 
 #### Media & System Notifications

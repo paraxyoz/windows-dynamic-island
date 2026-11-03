@@ -13,6 +13,14 @@ namespace WindowsDynamicIsland
         [STAThread]
         public static int Main(string[] args)
         {
+            try
+            {
+                WindowsDynamicIsland.Win32.NativeMethods.SetCurrentProcessExplicitAppUserModelID("Paraxyoz.WindowsDynamicIsland");
+            }
+            catch
+            {
+            }
+
             // CLI Integration: allow external tools (Codex, Antigravity hooks, scripts) to push events
             // Example: WindowsDynamicIsland.exe --notify "Codex завершил работу ✓"
             if (args != null && args.Length > 0)

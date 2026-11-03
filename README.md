@@ -1,6 +1,8 @@
-# Windows Dynamic Island
-
 <div align="center">
+
+<img src="assets/logo.png" alt="Windows Dynamic Island Logo" width="128" />
+
+# Windows Dynamic Island
 
 [![Release](https://img.shields.io/badge/Release-v1.0.0--beta-6366f1?style=for-the-badge&logo=github)](https://github.com/paraxyoz/windows-dynamic-island/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078d4?style=for-the-badge&logo=windows)](https://github.com/paraxyoz/windows-dynamic-island)
@@ -13,7 +15,7 @@
 
 **A lightweight, native, and high-performance Dynamic Island interface for Windows 10 and Windows 11.**
 
-[Download Installer (.exe)](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) | [Portable Version](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) | [Features](#key-features) | [Hotkeys](#default-hotkeys) | [Build Guide](#building-from-source) | [Документация на русском](README.ru.md)
+[Download Setup Installer (.exe)](https://github.com/paraxyoz/windows-dynamic-island/releases/latest) | [Features](#key-features) | [Hotkeys](#default-hotkeys) | [Build Guide](#building-from-source) | [Документация на русском](README.ru.md)
 
 <br/>
 
@@ -103,15 +105,11 @@
 
 ### Installer (Recommended)
 1. Download **`WindowsDynamicIslandSetup.exe`** from [Releases](https://github.com/paraxyoz/windows-dynamic-island/releases/latest).
-2. Run the executable to install the application, create Start Menu shortcuts, and optionally register startup.
+2. Run the executable to install the application, extract sound presets, create Desktop & Start Menu shortcuts, and optionally register startup.
 3. For silent automated deployment:
    ```powershell
    .\WindowsDynamicIslandSetup.exe --silent
    ```
-
-### Portable Executable
-1. Download **`WindowsDynamicIsland.exe`** from [Releases](https://github.com/paraxyoz/windows-dynamic-island/releases/latest).
-2. Place the executable in any directory and launch directly. No registry changes or external dependencies are required.
 
 ---
 
@@ -133,9 +131,9 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 The build script will:
-1. Compile `src/WindowsDynamicIsland` in `Release x64` configuration.
+1. Compile `src/WindowsDynamicIsland` in `Release x64` configuration with embedded application icon.
 2. Run automated verification tests (`WindowsDynamicIsland.Tests.exe`).
-3. Compile the standalone setup installer into `dist/`.
+3. Compile the standalone setup installer (`dist/WindowsDynamicIslandSetup.exe`) embedding the app, custom sounds, and icon assets.
 
 ---
 

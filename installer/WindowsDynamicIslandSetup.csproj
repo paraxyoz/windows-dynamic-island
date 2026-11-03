@@ -47,6 +47,26 @@
       <Link>Payload\app.ico</Link>
       <LogicalName>Payload.app.ico</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="..\assets\logo.png">
+      <Link>Payload\logo.png</Link>
+      <LogicalName>Payload.logo.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\assets\Sounds\applepay.mp3">
+      <Link>Payload\Sounds\applepay.mp3</Link>
+      <LogicalName>Payload.Sounds.applepay.mp3</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\assets\Sounds\phonk.mp3">
+      <Link>Payload\Sounds\phonk.mp3</Link>
+      <LogicalName>Payload.Sounds.phonk.mp3</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\assets\Sounds\plum.mp3">
+      <Link>Payload\Sounds\plum.mp3</Link>
+      <LogicalName>Payload.Sounds.plum.mp3</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\assets\Sounds\trum.mp3">
+      <Link>Payload\Sounds\trum.mp3</Link>
+      <LogicalName>Payload.Sounds.trum.mp3</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="SetupProgram.cs" />

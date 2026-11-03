@@ -25,6 +25,9 @@ namespace WindowsDynamicIsland.Win32
         public const int WM_INPUTLANGCHANGE = 0x0051;
         public const int WM_DISPLAYCHANGE = 0x007E;
         public const int WM_NCHITTEST = 0x0084;
+        public const int WM_SETICON = 0x0080;
+        public const int ICON_SMALL = 0;
+        public const int ICON_BIG = 1;
         public const int HTTRANSPARENT = -1;
         public const int HTCLIENT = 1;
 
@@ -131,6 +134,12 @@ namespace WindowsDynamicIsland.Win32
 
         [DllImport("user32.dll")]
         public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("shell32.dll", SetLastError = true)]
+        public static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
         [DllImport("user32.dll")]
         public static extern short GetKeyState(int nVirtKey);
