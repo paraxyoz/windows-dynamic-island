@@ -135,6 +135,7 @@ namespace WindowsDynamicIsland.UI
         private TextBlock _toastSubtitleText;
         private Border _toastProgressTrack;
         private Border _toastProgressFill;
+        private double? _currentProgressRatio;
         private StackPanel _toastActionsPanel;
 
         // Expanded State Elements
@@ -1026,7 +1027,8 @@ namespace WindowsDynamicIsland.UI
                 CornerRadius = new CornerRadius(2),
                 Background = _palette.RaisedBackground,
                 Margin = new Thickness(0, 4, 0, 0),
-                Visibility = Visibility.Collapsed
+                Visibility = Visibility.Collapsed,
+                ClipToBounds = true
             };
             _toastProgressFill = new Border
             {
@@ -1034,9 +1036,18 @@ namespace WindowsDynamicIsland.UI
                 CornerRadius = new CornerRadius(2),
                 Background = _palette.PrimaryText,
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Width = 100
+                Width = 0
             };
             _toastProgressTrack.Child = _toastProgressFill;
+            _toastProgressTrack.SizeChanged += (s, e) =>
+            {
+                if (_currentProgressRatio.HasValue && _toastProgressTrack.Visibility == Visibility.Visible && e.NewSize.Width > 0)
+                {
+                    double targetW = Math.Max(0.0, Math.Min(e.NewSize.Width, e.NewSize.Width * _currentProgressRatio.Value));
+                    _toastProgressFill.BeginAnimation(WidthProperty, null);
+                    _toastProgressFill.Width = targetW;
+                }
+            };
             centerStack.Children.Add(_toastProgressTrack);
 
             Grid.SetColumn(centerStack, 2);
@@ -1614,24 +1625,11 @@ namespace WindowsDynamicIsland.UI
 
             if (ev.ProgressRatio.HasValue)
             {
-                _toastProgressTrack.Visibility = Visibility.Visible;
-                double targetW = Math.Max(0, Math.Min(190, 190 * ev.ProgressRatio.Value));
-                if (wasAlreadyToast)
-                {
-                    var barAnim = new DoubleAnimation(targetW, TimeSpan.FromMilliseconds(65))
-                    {
-                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                    };
-                    _toastProgressFill.BeginAnimation(WidthProperty, barAnim);
-                }
-                else
-                {
-                    _toastProgressFill.BeginAnimation(WidthProperty, null);
-                    _toastProgressFill.Width = targetW;
-                }
+                UpdateToastProgress(ev.ProgressRatio.Value, wasAlreadyToast);
             }
             else
             {
+                _currentProgressRatio = null;
                 _toastProgressFill.BeginAnimation(WidthProperty, null);
                 _toastProgressTrack.Visibility = Visibility.Collapsed;
             }
@@ -1663,6 +1661,41 @@ namespace WindowsDynamicIsland.UI
 
             double toastW = (_toastActionsPanel.Children.Count > 0) ? 450.0 : BaseToastWidth;
             _animEngine.AnimateTo(toastW, BaseToastHeight, 18.0);
+        }
+
+        private void UpdateToastProgress(double ratio, bool animate)
+        {
+            ratio = Math.Max(0.0, Math.Min(1.0, ratio));
+            _currentProgressRatio = ratio;
+            _toastProgressTrack.Visibility = Visibility.Visible;
+
+            double trackWidth = _toastProgressTrack.ActualWidth;
+            if (trackWidth <= 10.0)
+            {
+                _toastLayer.Measure(new System.Windows.Size(BaseToastWidth, BaseToastHeight));
+                _toastLayer.Arrange(new System.Windows.Rect(0, 0, BaseToastWidth, BaseToastHeight));
+                trackWidth = _toastProgressTrack.ActualWidth;
+            }
+            if (trackWidth <= 10.0)
+            {
+                trackWidth = 250.0;
+            }
+
+            double targetW = Math.Max(0.0, Math.Min(trackWidth, trackWidth * ratio));
+
+            if (animate)
+            {
+                var barAnim = new DoubleAnimation(targetW, TimeSpan.FromMilliseconds(65))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                _toastProgressFill.BeginAnimation(WidthProperty, barAnim);
+            }
+            else
+            {
+                _toastProgressFill.BeginAnimation(WidthProperty, null);
+                _toastProgressFill.Width = targetW;
+            }
         }
 
         private void EnterIdleRetractedState()
