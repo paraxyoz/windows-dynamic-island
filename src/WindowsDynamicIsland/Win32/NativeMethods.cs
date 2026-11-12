@@ -31,8 +31,6 @@ namespace WindowsDynamicIsland.Win32
         public const int HTTRANSPARENT = -1;
         public const int HTCLIENT = 1;
 
-        public const uint WDA_NONE = 0x00000000;
-        public const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
 
         public const int WH_KEYBOARD_LL = 13;
         public const int WM_KEYDOWN = 0x0100;
@@ -141,6 +139,9 @@ namespace WindowsDynamicIsland.Win32
         [DllImport("shell32.dll", SetLastError = true)]
         public static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        public static extern int GetCurrentPackageFullName(ref int packageFullNameLength, StringBuilder packageFullName);
+
         [DllImport("user32.dll")]
         public static extern short GetKeyState(int nVirtKey);
 
@@ -192,9 +193,6 @@ namespace WindowsDynamicIsland.Win32
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
 
         public static bool IsCapsLockOn()
         {
@@ -316,6 +314,33 @@ namespace WindowsDynamicIsland.Win32
             catch
             {
             }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DeviceInterfaceFilter
+        {
+            public int Size;
+            public int DeviceType;
+            public int Reserved;
+            public Guid ClassGuid;
+            public short Name;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr RegisterDeviceNotification(IntPtr recipient, ref DeviceInterfaceFilter filter, int flags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool UnregisterDeviceNotification(IntPtr registration);
+
+        public static IntPtr RegisterUsbDeviceNotifications(IntPtr window)
+        {
+            var filter = new DeviceInterfaceFilter
+            {
+                Size = Marshal.SizeOf(typeof(DeviceInterfaceFilter)), DeviceType = 5,
+                ClassGuid = new Guid("A5DCBF10-6530-11D2-901F-00C04FB951ED")
+            };
+            return RegisterDeviceNotification(window, ref filter, 0);
         }
 
         public static bool IsForegroundWindowFullscreen(IntPtr islandHwnd)

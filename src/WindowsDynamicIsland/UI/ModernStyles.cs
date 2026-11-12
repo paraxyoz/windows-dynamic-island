@@ -85,7 +85,6 @@ namespace WindowsDynamicIsland.UI
     <Style TargetType=""{x:Type CheckBox}"">
         <Setter Property=""Width"" Value=""34""/>
         <Setter Property=""Height"" Value=""18""/>
-        <Setter Property=""FocusVisualStyle"" Value=""{x:Null}""/>
         <Setter Property=""Template"">
             <Setter.Value>
                 <ControlTemplate TargetType=""{x:Type CheckBox}"">
@@ -119,6 +118,61 @@ namespace WindowsDynamicIsland.UI
         </Setter>
     </Style>
 
+    <Style x:Key=""IslandPlayerButton"" TargetType=""{x:Type Button}"">
+        <Setter Property=""Cursor"" Value=""Hand""/>
+        <Setter Property=""BorderThickness"" Value=""0""/>
+        <Setter Property=""HorizontalContentAlignment"" Value=""Center""/>
+        <Setter Property=""Template"">
+            <Setter.Value>
+                <ControlTemplate TargetType=""{x:Type Button}"">
+                    <Grid x:Name=""Surface"" Background=""Transparent"">
+                        <Border CornerRadius=""9"" Background=""{TemplateBinding Background}""/>
+                        <Border x:Name=""Glow"" CornerRadius=""9"" Background=""White"" Opacity=""0""/>
+                        <Border Padding=""{TemplateBinding Padding}"">
+                            <ContentPresenter HorizontalAlignment=""{TemplateBinding HorizontalContentAlignment}"" VerticalAlignment=""Center""/>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property=""IsMouseOver"" Value=""True"">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard><Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName=""Glow"" Storyboard.TargetProperty=""Opacity""
+                                                     To=""0.085"" Duration=""0:0:0.15""/>
+                                </Storyboard></BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard><Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName=""Glow"" Storyboard.TargetProperty=""Opacity""
+                                                     To=""0"" Duration=""0:0:0.18""/>
+                                </Storyboard></BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property=""IsPressed"" Value=""True"">
+                            <Setter TargetName=""Surface"" Property=""Opacity"" Value=""0.77""/>
+                        </Trigger>
+                        <Trigger Property=""IsEnabled"" Value=""False"">
+                            <Setter TargetName=""Surface"" Property=""Opacity"" Value=""0.48""/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key=""IslandMeter"" TargetType=""{x:Type ProgressBar}"">
+        <Setter Property=""Template"">
+            <Setter.Value>
+                <ControlTemplate TargetType=""{x:Type ProgressBar}"">
+                    <Grid ClipToBounds=""True"">
+                        <Border x:Name=""PART_Track"" CornerRadius=""2"" Background=""{TemplateBinding Background}""/>
+                        <Border x:Name=""PART_Indicator"" HorizontalAlignment=""Left""
+                                CornerRadius=""2"" Background=""{TemplateBinding Foreground}""/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Minimal Slim Slider -->
     <Style TargetType=""{x:Type Slider}"">
         <Setter Property=""Height"" Value=""18""/>
@@ -126,7 +180,7 @@ namespace WindowsDynamicIsland.UI
         <Setter Property=""Template"">
             <Setter.Value>
                 <ControlTemplate TargetType=""{x:Type Slider}"">
-                    <Grid VerticalAlignment=""Center"">
+                    <Grid Background=""Transparent"" VerticalAlignment=""Center"">
                         <Border Height=""4""
                                 CornerRadius=""2""
                                 Background=""{DynamicResource IslandControlTrackBg}""
@@ -252,7 +306,7 @@ namespace WindowsDynamicIsland.UI
                 app.Resources["IslandControlTrackBg"] = ThemeTokens.MakeBrush(52, 255, 255, 255);
                 app.Resources["IslandControlTrackBorder"] = ThemeTokens.MakeBrush(110, 255, 255, 255);
                 app.Resources["IslandControlThumbIdle"] = ThemeTokens.MakeBrush(215, 255, 255, 255);
-                app.Resources["IslandControlActiveBg"] = ThemeTokens.MakeBrush(185, 255, 255, 255);
+                app.Resources["IslandControlActiveBg"] = palette.Accent;
                 app.Resources["IslandControlThumbActive"] = ThemeTokens.MakeBrush(255, 24, 30, 44);
                 app.Resources["IslandScrollThumb"] = ThemeTokens.MakeBrush(95, 255, 255, 255);
             }

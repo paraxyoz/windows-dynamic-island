@@ -15,6 +15,21 @@ namespace WindowsDynamicIsland.Tests
         [STAThread]
         public static int Main()
         {
+            string testData = Path.Combine(Path.GetTempPath(), "WindowsDynamicIsland.Tests-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(testData);
+            AppDomain.CurrentDomain.SetData("WindowsDynamicIsland.TestDataDirectory", testData);
+            try
+            {
+                return RunAll();
+            }
+            finally
+            {
+                Directory.Delete(testData, true);
+            }
+        }
+
+        private static int RunAll()
+        {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
             Console.WriteLine("=== Запуск модульных и интеграционных тестов Windows Dynamic Island ===");
 
@@ -27,6 +42,13 @@ namespace WindowsDynamicIsland.Tests
             RunTest("7. EventQueueManager: Очередь приоритетов и склейка однотипных событий", TestEventQueuePriorities);
             RunTest("8. SystemAudioController & NativeMethods: Реальный микшер звука и раскладка", TestHardwareAudioAndKeyboard);
             RunTest("9. WeatherService: Реальный запрос к метеосерверу Open-Meteo", TestLiveWeatherApi);
+
+            RunTest("10. LyricsService: Разбор LRC, пустые строки и синхронизация после перемотки", TestSyncedLyrics);
+
+            RunTest("11. Lyricsfile: реальные временные метки слов и переход на LRC", TestWordLyrics);
+            RunTest("12. Telegram: адрес чата только из корректного имени пользователя", TestTelegramChatUri);
+            RunTest("13. Dota GSI: токен и данные матча", TestDotaTelemetry);
+            RunTest("14. PresentMon: FPS главной цепочки кадров", TestPresentMon);
 
             Console.WriteLine($"=== Итог тестов: Пройдено {_passed}, Ошибок {_failed} ===");
             return _failed == 0 ? 0 : 1;
@@ -50,6 +72,76 @@ namespace WindowsDynamicIsland.Tests
         private static void Assert(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException(message);
+        }
+
+        private static void TestSyncedLyrics()
+        {
+            const string lrc = "[ar:Artist]\n[offset:+250]\n[00:20.50][00:02.50]Repeat [00:59]\n[00:05]Next\n[00:06.125]\n";
+            var lines = LyricsService.ParseLrc(lrc);
+            var lyrics = new TrackLyrics(lines, null, false);
+            Assert(lines.Count == 4, "Повторяющиеся метки и пустой интервал должны сохраниться");
+            Assert(lines[0].Text == "Repeat [00:59]", "Метка внутри строки должна остаться текстом");
+            Assert(lines[0].Time.TotalMilliseconds == 2250, "Должны учитываться дробные секунды и offset");
+            Assert(lyrics.ActiveLine(TimeSpan.FromMilliseconds(2249)) == -1, "До первой строки подсветки нет");
+            Assert(lyrics.ActiveLine(TimeSpan.FromMilliseconds(4750)) == 1, "На границе активна новая строка");
+            Assert(lines[lyrics.ActiveLine(TimeSpan.FromSeconds(6))].Text.Length == 0, "Пустая строка завершает подсветку");
+            Assert(lyrics.ActiveLine(TimeSpan.FromSeconds(21)) == 3, "Перемотка вперёд выбирает соответствующую строку");
+            Assert(lyrics.ActiveLine(TimeSpan.FromSeconds(3)) == 0, "Перемотка назад возвращает первую строку");
+            Assert(LyricsService.ParseLrc(null).Count == 0, "Отсутствие LRC допускается");
+        }
+
+        private static void TestWordLyrics()
+        {
+            const string yaml = @"version: '1.0'
+lines:
+  - text: 'Sing it'
+    start_ms: 1000
+    end_ms: 2000
+    words:
+      - text: 'Sing '
+        start_ms: 1000
+        end_ms: 1500
+      - text: it
+        start_ms: 1500
+        end_ms: 2000
+  - text: Wait
+    start_ms: 2500
+    end_ms: 2800
+plain: |
+  Sing it
+  Wait";
+            var lines = LyricsService.ParseWordLyrics(yaml);
+            Assert(lines.Count == 2 && lines[0].Words.Count == 2, "Должны сохраниться обе строки и оба слова");
+            Assert(lines[0].Words[0].Text == "Sing ", "Пробелы в сегментах должны сохраняться");
+            Assert(lines[0].Words[1].Start.TotalMilliseconds == 1500, "Подсветка слова должна использовать исходную метку");
+            Assert(lines[1].Words.Count == 0, "Строка без слов остаётся синхронизированной по строке");
+            Assert(LyricsService.ParseWordLyrics("lines:\n- text: Line\n  start_ms: 1000").Count == 0,
+                "Данные без меток слов обрабатываются через LRC");
+        }
+
+        private static void TestTelegramChatUri()
+        {
+            Assert(SystemIntegrationService.TelegramChatUri("@example_user")?.OriginalString == "tg://resolve?domain=example_user",
+                "Корректный username должен открывать чат Telegram");
+            Assert(SystemIntegrationService.TelegramChatUri("Display Name") == null, "Из имени нельзя угадывать чат");
+            Assert(SystemIntegrationService.TelegramChatUri("@example&start=123") == null, "Параметры из уведомления недопустимы");
+        }
+
+        private static void TestDotaTelemetry()
+        {
+            const string state = "{\"auth\":{\"token\":\"sample\"},\"map\":{\"matchid\":123,\"clock_time\":90,\"radiant_score\":7,\"dire_score\":5},\"hero\":{\"name\":\"npc_dota_hero_axe\"},\"player\":{\"kills\":2,\"deaths\":1,\"assists\":3}}";
+            Assert(!DotaTelemetry.TrySummarize(state, "other", out _), "Чужой токен должен отклоняться");
+            Assert(DotaTelemetry.TrySummarize(state, "sample", out var summary) && summary.Contains("Матч 123") &&
+                   summary.Contains("axe") && summary.Contains("Radiant 7 : 5 Dire") && summary.Contains("1:30"),
+                   "Поля матча должны отображаться из пакета GSI");
+        }
+
+        private static void TestPresentMon()
+        {
+            const string csv = "SwapChainAddress,MsBetweenPresents\nA,16\nB,200\nA,16\nA,16\nA,0\n";
+            Assert(Math.Abs((PresentMonSampler.ReadFps(csv) ?? 0) - 62.5) < 0.1, "FPS должен использовать только основную цепочку кадров");
+            Assert(PresentMonSampler.ReadFps("SwapChainAddress,MsBetweenPresents\nA,16\n") == null,
+                   "Слишком короткий захват не должен показывать FPS");
         }
 
         private static void TestStorageCrashRecovery()

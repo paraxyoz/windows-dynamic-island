@@ -19,6 +19,7 @@ namespace WindowsDynamicIsland.UI.Views
         private ThemePalette _palette;
 
         private StackPanel _itemsPanel;
+        private ScrollViewer _shelfScroll;
         private Border _dropZoneBorder;
         private TextBlock _statusText;
         private Border _confirmDeleteBanner;
@@ -56,10 +57,10 @@ namespace WindowsDynamicIsland.UI.Views
 
             var headerText = new TextBlock
             {
-                Text = "Файловая полка • ссылки без перемещения оригиналов",
+                Text = "Файловая полка",
                 FontFamily = ThemeTokens.UiFont,
-                FontSize = 12,
-                FontWeight = FontWeights.Medium,
+                FontSize = 16,
+                FontWeight = FontWeights.SemiBold,
                 Foreground = _palette.SecondaryText,
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -110,7 +111,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.DestructiveSubtle,
                 BorderBrush = _palette.Destructive,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(12, 8, 12, 8),
                 Margin = new Thickness(0, 0, 0, 8),
@@ -162,7 +163,7 @@ namespace WindowsDynamicIsland.UI.Views
 
             // 3. Drop Zone & Items ScrollViewer
             _itemsPanel = new StackPanel();
-            var scroll = new ScrollViewer
+            var scroll = _shelfScroll = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
@@ -171,9 +172,9 @@ namespace WindowsDynamicIsland.UI.Views
 
             _dropZoneBorder = new Border
             {
-                Background = Brushes.Transparent,
+                Background = _palette.CardBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(6),
                 AllowDrop = true,
@@ -251,13 +252,13 @@ namespace WindowsDynamicIsland.UI.Views
         private void OnShelfDragLeave(object sender, DragEventArgs e)
         {
             _dropZoneBorder.BorderBrush = _palette.HairlineBorder;
-            _dropZoneBorder.Background = Brushes.Transparent;
+            _dropZoneBorder.Background = _palette.CardBackground;
         }
 
         private void OnShelfDrop(object sender, DragEventArgs e)
         {
             _dropZoneBorder.BorderBrush = _palette.HairlineBorder;
-            _dropZoneBorder.Background = Brushes.Transparent;
+            _dropZoneBorder.Background = _palette.CardBackground;
 
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
@@ -278,31 +279,12 @@ namespace WindowsDynamicIsland.UI.Views
             var items = _shelf.Items;
             if (items.Count == 0)
             {
-                var emptyBox = new Border
-                {
-                    Padding = new Thickness(24, 38, 24, 38),
-                    Child = new StackPanel
-                    {
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        Children =
-                        {
-                            VectorIcons.Create(VectorIcons.Shelf, _palette.MutedText, 28),
-                            new TextBlock
-                            {
-                                Text = "Полка пуста — перетащите сюда любые файлы с Рабочего стола или из Проводника",
-                                FontFamily = ThemeTokens.UiFont,
-                                FontSize = 12.5,
-                                Foreground = _palette.MutedText,
-                                Margin = new Thickness(0, 10, 0, 0),
-                                HorizontalAlignment = HorizontalAlignment.Center
-                            }
-                        }
-                    }
-                };
-                _itemsPanel.Children.Add(emptyBox);
+                _dropZoneBorder.Child = ThemeTokens.CreateEmptyState(_palette, VectorIcons.Shelf, "Перетащите файлы сюда",
+                    "Остров сохранит ссылки на оригиналы. Перетащите файл с полки в чат или другое приложение.");
                 return;
             }
 
+            _dropZoneBorder.Child = _shelfScroll;
             foreach (var item in items)
             {
                 item.RefreshMetadata();
@@ -330,7 +312,7 @@ namespace WindowsDynamicIsland.UI.Views
                 CornerRadius = new CornerRadius(8),
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1)
+                BorderThickness = new Thickness(0)
             };
 
             ImageSource shellIcon = exists && !item.IsDirectory ? NativeMethods.ExtractFileIcon(item.FilePath) : null;
@@ -398,7 +380,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.CardBackground,
                 BorderBrush = exists ? _palette.HairlineBorder : _palette.Warning,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(10, 7, 10, 7),
                 Margin = new Thickness(0, 0, 0, 6),
@@ -503,7 +485,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.CardBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(6),
                 MinWidth = 190,

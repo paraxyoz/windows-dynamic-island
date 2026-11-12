@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Media;
 using System.Windows.Threading;
 using WindowsDynamicIsland.Models;
 
@@ -45,7 +43,8 @@ namespace WindowsDynamicIsland.Services
                                ev.EventType == IslandEventType.PowerCountdown;
 
             // 1. Coalesce identical transient event types (e.g. rapid volume changes or media play/pause spam)
-            if (CurrentEvent != null && CurrentEvent.EventType == ev.EventType && isTransient)
+            if (CurrentEvent != null && CurrentEvent.EventType == ev.EventType &&
+                (isTransient || (ev.EventType == IslandEventType.TaskProgress && ev.Id == CurrentEvent.Id)))
             {
                 CurrentEvent = ev;
                 _currentEventExpiresAt = DateTime.Now.AddMilliseconds(Math.Max(800, ev.DurationMs));
@@ -64,7 +63,8 @@ namespace WindowsDynamicIsland.Services
             // (e.g. user changes track, adjusts volume, or pauses music while another non-critical banner was playing)
             if (CurrentEvent != null &&
                 (ev.Priority > CurrentEvent.Priority ||
-                 (CurrentEvent.Priority < IslandEventPriority.Critical && (isTransient || ev.Priority >= CurrentEvent.Priority))))
+                 (CurrentEvent.Priority < IslandEventPriority.Critical && CurrentEvent.PrimaryAction == null &&
+                  (isTransient || ev.Priority >= CurrentEvent.Priority))))
             {
                 ShowImmediate(ev);
                 return;
@@ -78,8 +78,9 @@ namespace WindowsDynamicIsland.Services
             {
                 if (_queue.Count < 8)
                 {
-                    _queue.Add(ev);
-                    _queue.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+                    int nextLowerPriority = _queue.FindIndex(item => item.Priority < ev.Priority);
+                    if (nextLowerPriority < 0) _queue.Add(ev);
+                    else _queue.Insert(nextLowerPriority, ev);
                 }
             }
         }

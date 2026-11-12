@@ -7,6 +7,9 @@ namespace WindowsDynamicIsland.Services
 {
     public static class StorageService
     {
+        internal static string IsolatedDataDirectory =>
+            AppDomain.CurrentDomain.GetData("WindowsDynamicIsland.TestDataDirectory") as string;
+
         private static readonly object SyncLock = new object();
         private static readonly string AppDataFolder;
         private static readonly string LogFilePath;
@@ -14,7 +17,7 @@ namespace WindowsDynamicIsland.Services
         static StorageService()
         {
             string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            AppDataFolder = Path.Combine(localAppData, "WindowsDynamicIsland");
+            AppDataFolder = IsolatedDataDirectory ?? Path.Combine(localAppData, "WindowsDynamicIsland");
             try
             {
                 if (!Directory.Exists(AppDataFolder))
@@ -51,21 +54,9 @@ namespace WindowsDynamicIsland.Services
                     File.WriteAllText(tempPath, json, Encoding.UTF8);
 
                     if (File.Exists(filePath))
-                    {
-                        try
-                        {
-                            File.Copy(filePath, backupPath, true);
-                        }
-                        catch
-                        {
-                        }
-                    }
-
-                    if (File.Exists(filePath))
-                    {
-                        File.Delete(filePath);
-                    }
-                    File.Move(tempPath, filePath);
+                        File.Replace(tempPath, filePath, backupPath);
+                    else
+                        File.Move(tempPath, filePath);
                 }
                 catch (Exception ex)
                 {

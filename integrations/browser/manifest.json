@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Dynamic Island Downloads",
+  "version": "1.0.0",
+  "description": "Sends download progress to Dynamic Island on this PC.",
+  "permissions": ["downloads", "nativeMessaging", "storage"],
+  "background": {"service_worker": "background.js"}
+}

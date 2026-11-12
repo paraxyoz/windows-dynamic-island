@@ -31,8 +31,8 @@ namespace WindowsDynamicIslandSetup
 
             if (args != null && args.Any(a => string.Equals(a, "--silent", StringComparison.OrdinalIgnoreCase)))
             {
-                PerformInstall(defaultDir, createDesktopShortcut: true, enableAutoStart: true, launchNow: true);
-                return 0;
+                return PerformInstall(defaultDir, createDesktopShortcut: true, enableAutoStart: true,
+                    launchNow: true, showErrors: false) ? 0 : 1;
             }
 
             var app = new Application();
@@ -293,8 +293,13 @@ namespace WindowsDynamicIslandSetup
 
                 installBtn.IsEnabled = false;
                 installBtn.Content = "Установка...";
-                PerformInstall(chosenPath, cbShortcut.IsChecked == true, cbAutoStart.IsChecked == true, launchNow: true);
-                win.Close();
+                if (PerformInstall(chosenPath, cbShortcut.IsChecked == true, cbAutoStart.IsChecked == true, launchNow: true))
+                    win.Close();
+                else
+                {
+                    installBtn.Content = "Установить и запустить";
+                    installBtn.IsEnabled = true;
+                }
             };
 
             btnRow.Children.Add(cancelBtn);
@@ -348,7 +353,7 @@ namespace WindowsDynamicIslandSetup
             return btn;
         }
 
-        private static void PerformInstall(string installDir, bool createDesktopShortcut, bool enableAutoStart, bool launchNow)
+        private static bool PerformInstall(string installDir, bool createDesktopShortcut, bool enableAutoStart, bool launchNow, bool showErrors = true)
         {
             try
             {
@@ -356,7 +361,13 @@ namespace WindowsDynamicIslandSetup
 
                 foreach (var p in Process.GetProcessesByName("WindowsDynamicIsland"))
                 {
-                    try { p.Kill(); p.WaitForExit(1500); } catch { }
+                    using (p)
+                    {
+                        if (p.HasExited) continue;
+                        p.Kill();
+                        if (!p.WaitForExit(1500))
+                            throw new IOException("Не удалось завершить работающий Windows Dynamic Island.");
+                    }
                 }
 
                 if (!Directory.Exists(installDir))
@@ -367,7 +378,6 @@ namespace WindowsDynamicIslandSetup
                 string exeTarget = Path.Combine(installDir, "WindowsDynamicIsland.exe");
                 string icoTarget = Path.Combine(installDir, "app.ico");
 
-                ExtractResource("Payload.WindowsDynamicIsland.exe", exeTarget);
                 ExtractResource("Payload.app.ico", icoTarget);
 
                 // Extract notification audio files out of the box
@@ -375,22 +385,13 @@ namespace WindowsDynamicIslandSetup
                 if (!Directory.Exists(soundsDir)) Directory.CreateDirectory(soundsDir);
                 string[] soundFiles = new[] { "applepay.mp3", "phonk.mp3", "plum.mp3", "trum.mp3" };
                 foreach (var sf in soundFiles)
-                {
-                    try
-                    {
-                        ExtractResource("Payload.Sounds." + sf, Path.Combine(soundsDir, sf));
-                    }
-                    catch
-                    {
-                    }
-                }
+                    ExtractResource("Payload.Sounds." + sf, Path.Combine(soundsDir, sf));
+                ExtractResource("Payload.WindowsDynamicIsland.exe", exeTarget);
 
-                if (enableAutoStart)
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
                 {
-                    using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
-                    {
-                        key?.SetValue("WindowsDynamicIsland", $"\"{exeTarget}\"");
-                    }
+                    if (enableAutoStart) key.SetValue("WindowsDynamicIsland", $"\"{exeTarget}\"");
+                    else key.DeleteValue("WindowsDynamicIsland", false);
                 }
 
                 if (createDesktopShortcut)
@@ -420,22 +421,33 @@ namespace WindowsDynamicIslandSetup
                         UseShellExecute = true
                     });
                 }
+                return true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Ошибка установки: " + ex.Message, "Windows Dynamic Island", MessageBoxButton.OK, MessageBoxImage.Error);
+                if (showErrors)
+                    MessageBox.Show("Ошибка установки: " + ex.Message, "Windows Dynamic Island", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
             }
         }
 
         private static void ExtractResource(string resourceName, string destPath)
         {
-            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+            string stagingPath = destPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
             {
-                if (s == null) return;
-                using (FileStream fs = File.Create(destPath))
+                using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
                 {
-                    s.CopyTo(fs);
+                    if (source == null) throw new FileNotFoundException(resourceName);
+                    using (var file = new FileStream(stagingPath, FileMode.CreateNew))
+                        source.CopyTo(file);
                 }
+                if (File.Exists(destPath)) File.Replace(stagingPath, destPath, null);
+                else File.Move(stagingPath, destPath);
+            }
+            finally
+            {
+                if (File.Exists(stagingPath)) File.Delete(stagingPath);
             }
         }
 

@@ -12,6 +12,8 @@ namespace WindowsDynamicIsland.Services
         private const string RunRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string AppRegistryValueName = "WindowsDynamicIsland";
 
+        private bool _startupEnabled;
+
         public AppSettings Current { get; private set; }
 
         public event Action<AppSettings> SettingsChanged;
@@ -47,14 +49,20 @@ namespace WindowsDynamicIsland.Services
             {
                 ValidateBounds(Current);
             }
-            SyncStartupRegistry(Current.AutoStartWithWindows);
+            _startupEnabled = ReadStartupRegistry();
+            Current.AutoStartWithWindows = _startupEnabled;
         }
 
         public void Save()
         {
             ValidateBounds(Current);
+            if (Current.AutoStartWithWindows != _startupEnabled)
+            {
+                SyncStartupRegistry(Current.AutoStartWithWindows);
+                _startupEnabled = ReadStartupRegistry();
+                Current.AutoStartWithWindows = _startupEnabled;
+            }
             StorageService.SaveJson(SettingsFileName, Current);
-            SyncStartupRegistry(Current.AutoStartWithWindows);
             SettingsChanged?.Invoke(Current);
         }
 
@@ -82,8 +90,24 @@ namespace WindowsDynamicIsland.Services
             s.WeatherRefreshMinutes = Math.Max(5, Math.Min(120, s.WeatherRefreshMinutes));
         }
 
+        private static bool ReadStartupRegistry()
+        {
+            if (StorageService.IsolatedDataDirectory != null) return false;
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunRegistryPath))
+                    return key?.GetValue(AppRegistryValueName) is string path && !string.IsNullOrWhiteSpace(path);
+            }
+            catch (Exception ex)
+            {
+                StorageService.LogError(nameof(ReadStartupRegistry), ex);
+                return false;
+            }
+        }
+
         public static void SyncStartupRegistry(bool enable)
         {
+            if (StorageService.IsolatedDataDirectory != null) return;
             try
             {
                 using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunRegistryPath, true))

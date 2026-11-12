@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using WindowsDynamicIsland.Models;
@@ -33,6 +34,7 @@ namespace WindowsDynamicIsland.UI.Views
         private readonly Action<int> _navigateToTab;
         private readonly Action<int> _navigateToSettingsCategory;
         private readonly Action _onSettingsChanged;
+        private readonly Action _newNote;
         private readonly Func<IntPtr> _getHwnd;
 
         private ThemePalette _palette;
@@ -47,17 +49,21 @@ namespace WindowsDynamicIsland.UI.Views
 
         private Image _albumImage;
         private Border _albumFallbackIcon;
-        private Border _mediaStatusBadge;
-        private TextBlock _mediaStatusText;
         private TextBlock _trackTitleText;
         private TextBlock _trackArtistText;
-        private TextBlock _trackSourceSubtitle;
-        private Border _progressFill;
-        private Border _progressTrack;
         private TextBlock _timePositionText;
         private TextBlock _timeDurationText;
-        private Border _playPauseBtn;
         private System.Windows.Shapes.Path _playPauseIcon;
+        private Grid _dashboardDetails;
+        private Border _lyricsCard;
+        private TrackLyricsView _lyricsView;
+        private Button _lyricsButton;
+        private Slider _seekSlider;
+        private TextBlock _seekStatus;
+        private bool _showLyrics;
+        private bool _updatingSeekSlider;
+        private int? _dragTrackVersion;
+        private int _renderedTrackVersion = -1;
 
         private Slider _volumeSlider;
         private TextBlock _volumeValueText;
@@ -72,7 +78,6 @@ namespace WindowsDynamicIsland.UI.Views
         private Border _numBadge;
         private TextBlock _numBadgeText;
 
-        private StackPanel _powerNormalPanel;
         private StackPanel _powerConfirmPanel;
         private StackPanel _powerCountdownPanel;
         private TextBlock _powerConfirmText;
@@ -91,7 +96,8 @@ namespace WindowsDynamicIsland.UI.Views
             Action<int> navigateToTab,
             Func<IntPtr> getHwnd,
             Action<int> navigateToSettingsCategory = null,
-            Action onSettingsChanged = null)
+            Action onSettingsChanged = null,
+            Action newNote = null)
         {
             _settings = settings;
             _media = media;
@@ -105,8 +111,10 @@ namespace WindowsDynamicIsland.UI.Views
             _getHwnd = getHwnd;
             _navigateToSettingsCategory = navigateToSettingsCategory;
             _onSettingsChanged = onSettingsChanged;
+            _newNote = newNote;
 
             _media.MediaStateChanged += RefreshMediaUi;
+            _media.TimelineChanged += RefreshTimelineUi;
             _sys.VolumeStateChanged += OnVolumeStateChanged;
             _sys.KeyboardStateChanged += RefreshKeyboardUi;
             _sys.PowerStateChanged += RefreshPowerUi;
@@ -133,30 +141,42 @@ namespace WindowsDynamicIsland.UI.Views
             root.Children.Add(searchBarContainer);
 
             // --- 2. Asymmetric Main Dashboard Grid ---
-            var contentGrid = new Grid { Margin = new Thickness(0, 8, 0, 0) };
-            contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.22, GridUnitType.Star) });
+            var contentGrid = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+            contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.12, GridUnitType.Star) });
             contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
             contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
 
             // Left Column: Rich Media Session Player + System Audio Mixer
             var leftGrid = new Grid();
             leftGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            leftGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(8) });
+            leftGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1) });
             leftGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             var mediaCard = BuildMediaPlayerCard();
+            mediaCard.Background = Brushes.Transparent;
+            mediaCard.BorderThickness = new Thickness(0);
             Grid.SetRow(mediaCard, 0);
             leftGrid.Children.Add(mediaCard);
 
+            var seam = new Border
+            {
+                Background = _palette.HairlineBorder,
+                Margin = new Thickness(15, 0, 15, 0)
+            };
+            Grid.SetRow(seam, 1);
+            leftGrid.Children.Add(seam);
             var volumeCard = BuildVolumeCard();
+            volumeCard.Background = Brushes.Transparent;
+            volumeCard.BorderThickness = new Thickness(0);
             Grid.SetRow(volumeCard, 2);
             leftGrid.Children.Add(volumeCard);
 
-            Grid.SetColumn(leftGrid, 0);
-            contentGrid.Children.Add(leftGrid);
+            var playerSurface = ThemeTokens.CreateCard(_palette, 17, new Thickness(0));
+            playerSurface.Child = leftGrid;
+            contentGrid.Children.Add(playerSurface);
 
             // Right Column: Keyboard Layout & Locks + Power Management & AI Watcher
-            var rightGrid = new Grid();
+            var rightGrid = _dashboardDetails = new Grid();
             rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             rightGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(8) });
             rightGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -165,12 +185,31 @@ namespace WindowsDynamicIsland.UI.Views
             Grid.SetRow(kbCard, 0);
             rightGrid.Children.Add(kbCard);
 
-            var powerCard = BuildPowerAndAiCard();
+            var powerCard = BuildQuickActionsCard();
             Grid.SetRow(powerCard, 2);
             rightGrid.Children.Add(powerCard);
 
             Grid.SetColumn(rightGrid, 2);
             contentGrid.Children.Add(rightGrid);
+
+            _lyricsView = new TrackLyricsView(_media, _palette);
+            var lyricsLayout = new DockPanel();
+            var lyricsTitle = new TextBlock
+            {
+                Text = "Текст песни",
+                FontFamily = ThemeTokens.UiFont,
+                FontSize = 12,
+                Foreground = _palette.SecondaryText,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            DockPanel.SetDock(lyricsTitle, Dock.Top);
+            lyricsLayout.Children.Add(lyricsTitle);
+            lyricsLayout.Children.Add(_lyricsView);
+            _lyricsCard = ThemeTokens.CreateCard(_palette, 17, new Thickness(18, 14, 10, 12));
+            _lyricsCard.Child = lyricsLayout;
+            Grid.SetColumn(_lyricsCard, 2);
+            contentGrid.Children.Add(_lyricsCard);
+            UpdateLyricsVisibility();
 
             Grid.SetRow(contentGrid, 1);
             root.Children.Add(contentGrid);
@@ -179,9 +218,9 @@ namespace WindowsDynamicIsland.UI.Views
             _searchResultsPanel = new StackPanel();
             _searchResultsPopup = new Border
             {
-                Background = _palette.CardBackground,
+                Background = _palette.IsGlass ? ThemeTokens.MakeBrush(255, 31, 34, 43) : _palette.CardBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(8),
                 Margin = new Thickness(0, 4, 0, 0),
@@ -212,7 +251,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.CardBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(10, 5, 8, 5)
             };
@@ -441,7 +480,7 @@ namespace WindowsDynamicIsland.UI.Views
                     Subtitle = _timers != null && _timers.IsStopwatchRunning ? $"Запущен: {_timers.FormattedStopwatch}" : "Открыть секундомер и фиксацию кругов",
                     Category = "ЧАСЫ",
                     Keywords = "секундомер круги время отсчёт часы старт stopwatch laps clock",
-                    Execute = () => _navigateToTab?.Invoke(3)
+                    Execute = () => _navigateToTab?.Invoke(6)
                 },
                 new SearchCommandItem
                 {
@@ -456,7 +495,7 @@ namespace WindowsDynamicIsland.UI.Views
                             if (_timers.IsStopwatchRunning) _timers.PauseStopwatch();
                             else _timers.StartStopwatch();
                         }
-                        _navigateToTab?.Invoke(3);
+                        _navigateToTab?.Invoke(6);
                     }
                 },
                 new SearchCommandItem
@@ -465,7 +504,7 @@ namespace WindowsDynamicIsland.UI.Views
                     Subtitle = _timers != null && _timers.IsTimerActive ? $"Осталось: {_timers.FormattedTimerRemaining}" : "Открыть настройку и запуск таймера",
                     Category = "ЧАСЫ",
                     Keywords = "таймер обратный отсчёт время часы будильник минуты timer countdown alarm",
-                    Execute = () => _navigateToTab?.Invoke(3)
+                    Execute = () => _navigateToTab?.Invoke(6)
                 },
                 new SearchCommandItem
                 {
@@ -848,9 +887,9 @@ namespace WindowsDynamicIsland.UI.Views
             _searchResultsPanel.Children.Add(row);
         }
 
-        private UIElement BuildMediaPlayerCard()
+        private Border BuildMediaPlayerCard()
         {
-            var card = ThemeTokens.CreateCard(_palette, 12, new Thickness(14, 11, 14, 11));
+            var card = ThemeTokens.CreateCard(_palette, 17, new Thickness(15, 12, 15, 12));
             var layoutGrid = new Grid { VerticalAlignment = VerticalAlignment.Stretch };
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 0: Header + Live Status Pill
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Row 1: Artwork + Metadata
@@ -866,7 +905,7 @@ namespace WindowsDynamicIsland.UI.Views
             headerTitleStack.Children.Add(VectorIcons.Create(VectorIcons.Music, _palette.SecondaryText, 12.5));
             headerTitleStack.Children.Add(new TextBlock
             {
-                Text = "Мультимедиа Windows",
+                Text = "Плеер",
                 FontFamily = ThemeTokens.UiFont,
                 FontSize = 11.5,
                 FontWeight = FontWeights.Medium,
@@ -877,44 +916,42 @@ namespace WindowsDynamicIsland.UI.Views
             Grid.SetColumn(headerTitleStack, 0);
             headerRow.Children.Add(headerTitleStack);
 
-            _mediaStatusText = new TextBlock
+            _lyricsButton = new Button
             {
-                Text = _media.IsPlaying ? "В ЭФИРЕ" : "ПАУЗА",
-                FontFamily = ThemeTokens.MonoFont,
-                FontSize = 9.5,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = _media.IsPlaying ? _palette.Positive : _palette.MutedText,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            _mediaStatusBadge = new Border
-            {
-                CornerRadius = new CornerRadius(5),
-                BorderThickness = new Thickness(1),
-                BorderBrush = _palette.HairlineBorder,
+                Content = "Текст песни",
+                Foreground = _palette.PrimaryText,
                 Background = _palette.RaisedBackground,
-                Padding = new Thickness(0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Child = ThemeTokens.WrapContentWithGlassLayers(_palette, _mediaStatusText, 5, false, new Thickness(7, 2, 7, 2))
+                BorderBrush = _palette.HairlineBorder,
+                FontFamily = ThemeTokens.UiFont,
+                FontSize = 11.5,
+                Padding = new Thickness(9, 3, 9, 3),
+                ToolTip = "Поиск текста в LRCLIB по названию и исполнителю"
             };
-            Grid.SetColumn(_mediaStatusBadge, 1);
-            headerRow.Children.Add(_mediaStatusBadge);
+            _lyricsButton.SetResourceReference(StyleProperty, "IslandPlayerButton");
+            _lyricsButton.Click += (s, e) =>
+            {
+                _showLyrics = !_showLyrics;
+                UpdateLyricsVisibility();
+            };
+            Grid.SetColumn(_lyricsButton, 1);
+            headerRow.Children.Add(_lyricsButton);
             Grid.SetRow(headerRow, 0);
             layoutGrid.Children.Add(headerRow);
 
             // --- Row 1: 60x60 Cover Art + Track Info ---
             var topGrid = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 0, 6) };
-            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
+            topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
             topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
             topGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             var coverBox = new Border
             {
-                Width = 60,
-                Height = 60,
-                CornerRadius = new CornerRadius(10),
+                Width = 100,
+                Height = 100,
+                CornerRadius = new CornerRadius(14),
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 ClipToBounds = true
             };
 
@@ -928,6 +965,11 @@ namespace WindowsDynamicIsland.UI.Views
                 Stretch = Stretch.UniformToFill,
                 Visibility = Visibility.Collapsed
             };
+            coverGrid.SizeChanged += (s, e) =>
+            {
+                if (e.NewSize.Width > 0 && e.NewSize.Height > 0)
+                    coverGrid.Clip = new RectangleGeometry(new Rect(e.NewSize), 14, 14);
+            };
             coverGrid.Children.Add(_albumFallbackIcon);
             coverGrid.Children.Add(_albumImage);
             coverBox.Child = coverGrid;
@@ -939,7 +981,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Text = _media.Title,
                 FontFamily = ThemeTokens.UiFont,
-                FontSize = 13.5,
+                FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = _palette.PrimaryText,
                 TextTrimming = TextTrimming.CharacterEllipsis
@@ -957,17 +999,6 @@ namespace WindowsDynamicIsland.UI.Views
             };
             metaStack.Children.Add(_trackArtistText);
 
-            _trackSourceSubtitle = new TextBlock
-            {
-                Text = _media.IsPlaying ? "Активный аудиопоток • Системный плеер" : "Ожидание воспроизведения",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 10.5,
-                Foreground = _palette.MutedText,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                Margin = new Thickness(0, 3, 0, 0)
-            };
-            metaStack.Children.Add(_trackSourceSubtitle);
-
             Grid.SetColumn(metaStack, 2);
             topGrid.Children.Add(metaStack);
             Grid.SetRow(topGrid, 1);
@@ -975,25 +1006,54 @@ namespace WindowsDynamicIsland.UI.Views
 
             // --- Row 2: Progress Bar + Timestamps ---
             var timelineStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
-            _progressTrack = new Border
+            _seekSlider = new Slider
             {
-                Height = 5,
-                CornerRadius = new CornerRadius(2.5),
-                Background = _palette.RaisedBackground,
-                Margin = new Thickness(0, 0, 0, 4),
-                HorizontalAlignment = HorizontalAlignment.Stretch
+                SmallChange = 5,
+                LargeChange = 15,
+                Maximum = 0,
+                Margin = new Thickness(0, 0, 0, 3)
             };
-            _progressFill = new Border
+            System.Windows.Automation.AutomationProperties.SetName(_seekSlider, "Позиция воспроизведения, секунды");
+            ToolTipService.SetShowOnDisabled(_seekSlider, true);
+            _seekSlider.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((s, e) =>
             {
-                Height = 5,
-                CornerRadius = new CornerRadius(2.5),
-                Background = _palette.Accent,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Width = 0
+                if (!_media.CanSeek || !_seekSlider.CaptureMouse()) return;
+                e.Handled = true;
+                _seekSlider.Focus();
+                _dragTrackVersion = _media.TrackVersion;
+                PreviewSeek(e);
+            }), true);
+            _seekSlider.PreviewMouseMove += (s, e) =>
+            {
+                if (_dragTrackVersion.HasValue && _seekSlider.IsMouseCaptured)
+                    PreviewSeek(e);
             };
-            _progressTrack.SizeChanged += (s, e) => UpdateMediaProgressWidth();
-            _progressTrack.Child = _progressFill;
-            timelineStack.Children.Add(_progressTrack);
+            _seekSlider.AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(async (s, e) =>
+            {
+                if (!_dragTrackVersion.HasValue) return;
+                e.Handled = true;
+                PreviewSeek(e);
+                int track = _dragTrackVersion.Value;
+                _dragTrackVersion = null;
+                _seekSlider.ReleaseMouseCapture();
+                if (track == _media.TrackVersion) await SeekFromSliderAsync();
+                else RefreshTimelineUi();
+            }), true);
+            _seekSlider.LostMouseCapture += (s, e) =>
+            {
+                if (!_dragTrackVersion.HasValue) return;
+                _dragTrackVersion = null;
+                RefreshTimelineUi();
+            };
+            _seekSlider.ValueChanged += async (s, e) =>
+            {
+                if (_updatingSeekSlider) return;
+                if (_dragTrackVersion.HasValue)
+                    _timePositionText.Text = FormatMediaTime(TimeSpan.FromSeconds(e.NewValue));
+                else
+                    await SeekFromSliderAsync();
+            };
+            timelineStack.Children.Add(_seekSlider);
 
             var timeGrid = new Grid();
             _timePositionText = new TextBlock
@@ -1012,6 +1072,13 @@ namespace WindowsDynamicIsland.UI.Views
                 Foreground = _palette.MutedText,
                 HorizontalAlignment = HorizontalAlignment.Right
             };
+            _seekStatus = new TextBlock
+            {
+                FontSize = 10,
+                Foreground = _palette.SecondaryText,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            timeGrid.Children.Add(_seekStatus);
             timeGrid.Children.Add(_timePositionText);
             timeGrid.Children.Add(_timeDurationText);
             timelineStack.Children.Add(timeGrid);
@@ -1026,54 +1093,20 @@ namespace WindowsDynamicIsland.UI.Views
             transportGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
             transportGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            var prevContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            prevContent.Children.Add(VectorIcons.Create(VectorIcons.SkipPrev, _palette.PrimaryText, 13));
-            prevContent.Children.Add(new TextBlock
-            {
-                Text = "Пред.",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.SecondaryText,
-                Margin = new Thickness(5, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            var prevBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                prevContent,
-                async () => await _media.SkipPreviousAsync(),
-                false, false, 8, new Thickness(10, 6, 10, 6), "Предыдущий трек");
-            Grid.SetColumn(prevBtn, 0);
-            transportGrid.Children.Add(prevBtn);
+            var previous = CreateTransportButton(VectorIcons.Create(VectorIcons.SkipPrev, _palette.PrimaryText, 15),
+                "Предыдущий трек", _media.SkipPreviousAsync);
+            Grid.SetColumn(previous, 0);
+            transportGrid.Children.Add(previous);
 
-            _playPauseIcon = VectorIcons.Create(_media.IsPlaying ? VectorIcons.Pause : VectorIcons.Play, _palette.OnAccentText, 14);
-            var playCenterHost = new Grid { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            playCenterHost.Children.Add(_playPauseIcon);
-            _playPauseBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                playCenterHost,
-                async () => await _media.TogglePlayPauseAsync(),
-                true, false, 8, new Thickness(16, 6, 16, 6), "Воспроизведение / Пауза");
-            Grid.SetColumn(_playPauseBtn, 2);
-            transportGrid.Children.Add(_playPauseBtn);
+            _playPauseIcon = VectorIcons.Create(_media.IsPlaying ? VectorIcons.Pause : VectorIcons.Play, _palette.OnAccentText, 16);
+            var playPause = CreateTransportButton(_playPauseIcon, "Воспроизведение / пауза", _media.TogglePlayPauseAsync, true);
+            Grid.SetColumn(playPause, 2);
+            transportGrid.Children.Add(playPause);
 
-            var nextContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            nextContent.Children.Add(new TextBlock
-            {
-                Text = "След.",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.SecondaryText,
-                Margin = new Thickness(0, 0, 5, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            nextContent.Children.Add(VectorIcons.Create(VectorIcons.SkipNext, _palette.PrimaryText, 13));
-            var nextBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                nextContent,
-                async () => await _media.SkipNextAsync(),
-                false, false, 8, new Thickness(10, 6, 10, 6), "Следующий трек");
-            Grid.SetColumn(nextBtn, 4);
-            transportGrid.Children.Add(nextBtn);
+            var next = CreateTransportButton(VectorIcons.Create(VectorIcons.SkipNext, _palette.PrimaryText, 15),
+                "Следующий трек", _media.SkipNextAsync);
+            Grid.SetColumn(next, 4);
+            transportGrid.Children.Add(next);
 
             Grid.SetRow(transportGrid, 3);
             layoutGrid.Children.Add(transportGrid);
@@ -1082,7 +1115,24 @@ namespace WindowsDynamicIsland.UI.Views
             return card;
         }
 
-        private UIElement BuildVolumeCard()
+        private Button CreateTransportButton(
+            UIElement icon, string label, Func<System.Threading.Tasks.Task> command, bool primary = false)
+        {
+            var button = new Button
+            {
+                Content = icon,
+                ToolTip = label,
+                Height = 29,
+                Background = primary ? _palette.Accent : _palette.RaisedBackground,
+                BorderBrush = primary ? _palette.Accent : _palette.HairlineBorder
+            };
+            button.SetResourceReference(StyleProperty, "IslandPlayerButton");
+            System.Windows.Automation.AutomationProperties.SetName(button, label);
+            button.Click += async (s, e) => await command();
+            return button;
+        }
+
+        private Border BuildVolumeCard()
         {
             var card = ThemeTokens.CreateCard(_palette, 12, new Thickness(12, 10, 12, 10));
             var stack = new StackPanel();
@@ -1259,7 +1309,7 @@ namespace WindowsDynamicIsland.UI.Views
             _numBadge = new Border
             {
                 CornerRadius = new CornerRadius(6),
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 Padding = new Thickness(0),
                 SnapsToDevicePixels = true,
                 Child = ThemeTokens.WrapContentWithGlassLayers(_palette, _numBadgeText, 6, false, new Thickness(6, 4, 6, 4))
@@ -1272,18 +1322,17 @@ namespace WindowsDynamicIsland.UI.Views
             return card;
         }
 
-        private UIElement BuildPowerAndAiCard()
+        private UIElement BuildQuickActionsCard()
         {
-            var card = ThemeTokens.CreateCard(_palette, 12, new Thickness(14, 11, 14, 11));
+            var card = ThemeTokens.CreateCard(_palette, 17, new Thickness(15, 12, 15, 12));
             var layoutGrid = new Grid { VerticalAlignment = VerticalAlignment.Stretch };
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 0: Header
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 1: Power Buttons
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Row 2: Quick Tools Grid
-            layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 3: Auto-Hide Status Bar
 
             var headerTitle = new TextBlock
             {
-                Text = "Управление питанием и быстрые действия",
+                Text = "Быстрые действия",
                 FontFamily = ThemeTokens.UiFont,
                 FontSize = 11.5,
                 FontWeight = FontWeights.Medium,
@@ -1295,57 +1344,9 @@ namespace WindowsDynamicIsland.UI.Views
 
             var powerHost = new Grid();
 
-            // 1. Normal Power Buttons
-            _powerNormalPanel = new StackPanel();
-            var btnGrid = new Grid();
-            btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-            btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            // Power actions remain discoverable through command search and keep their confirmation.
 
-            var shutdownContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            shutdownContent.Children.Add(VectorIcons.Create(VectorIcons.Power, _palette.Destructive, 13));
-            shutdownContent.Children.Add(new TextBlock
-            {
-                Text = "Выключить",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11.5,
-                FontWeight = FontWeights.Medium,
-                Foreground = _palette.PrimaryText,
-                Margin = new Thickness(5, 0, 0, 0)
-            });
-
-            var shutdownBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                shutdownContent,
-                () => PromptPowerConfirmation(PowerActionKind.Shutdown),
-                false, false, 7, new Thickness(8, 6, 8, 6), "Выключение компьютера с подтверждением");
-            Grid.SetColumn(shutdownBtn, 0);
-            btnGrid.Children.Add(shutdownBtn);
-
-            var restartContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            restartContent.Children.Add(VectorIcons.Create(VectorIcons.Restart, _palette.SecondaryText, 13));
-            restartContent.Children.Add(new TextBlock
-            {
-                Text = "Перезагрузка",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11.5,
-                FontWeight = FontWeights.Medium,
-                Foreground = _palette.PrimaryText,
-                Margin = new Thickness(5, 0, 0, 0)
-            });
-
-            var restartBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                restartContent,
-                () => PromptPowerConfirmation(PowerActionKind.Restart),
-                false, false, 7, new Thickness(8, 6, 8, 6), "Перезагрузка компьютера с подтверждением");
-            Grid.SetColumn(restartBtn, 2);
-            btnGrid.Children.Add(restartBtn);
-
-            _powerNormalPanel.Children.Add(btnGrid);
-            powerHost.Children.Add(_powerNormalPanel);
-
-            // 2. Confirmation Panel
+            // Confirmation for actions initiated from command search
             _powerConfirmPanel = new StackPanel { Visibility = Visibility.Collapsed };
             _powerConfirmText = new TextBlock
             {
@@ -1421,122 +1422,50 @@ namespace WindowsDynamicIsland.UI.Views
             Grid.SetRow(powerHost, 1);
             layoutGrid.Children.Add(powerHost);
 
-            // --- Row 2: 3-Column Quick Productivity & Theme Shortcuts ---
-            var shortcutsGrid = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var noteShortcutContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            noteShortcutContent.Children.Add(VectorIcons.Create(VectorIcons.Notes, _palette.SecondaryText, 12));
-            noteShortcutContent.Children.Add(new TextBlock
+            var actions = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+            AddAction(VectorIcons.Notes, "Новая заметка", "Открыть редактор", () =>
             {
-                Text = "Заметка",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.PrimaryText,
-                Margin = new Thickness(4.5, 0, 0, 0)
+                if (_newNote != null) _newNote();
+                else _navigateToTab?.Invoke(3);
             });
-            var noteShortcutBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                noteShortcutContent,
-                () => _navigateToTab?.Invoke(3),
-                false, false, 7, new Thickness(6, 5, 6, 5), "Открыть раздел заметок");
-            Grid.SetColumn(noteShortcutBtn, 0);
-            shortcutsGrid.Children.Add(noteShortcutBtn);
-
-            var timerShortcutContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            timerShortcutContent.Children.Add(VectorIcons.Create(VectorIcons.Clock, _palette.SecondaryText, 12));
-            timerShortcutContent.Children.Add(new TextBlock
+            AddAction(VectorIcons.Clock, "Таймер", "Обратный отсчёт и секундомер", () => _navigateToTab?.Invoke(6));
+            var clipboardHint = AddAction(VectorIcons.Clipboard, "Последнее из буфера", "Скопировать последний фрагмент", () => { });
+            clipboardHint.Button.Click += (s, e) =>
             {
-                Text = "Таймер",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.PrimaryText,
-                Margin = new Thickness(4.5, 0, 0, 0)
-            });
-            var timerShortcutBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                timerShortcutContent,
-                () => _navigateToTab?.Invoke(3),
-                false, false, 7, new Thickness(6, 5, 6, 5), "Открыть таймер и секундомер");
-            Grid.SetColumn(timerShortcutBtn, 2);
-            shortcutsGrid.Children.Add(timerShortcutBtn);
-
-            string currentThemeLabel = _settings.Current.Theme == AppThemeMode.Ios26Glass
-                ? "Glass"
-                : (_settings.Current.Theme == AppThemeMode.Dark ? "OLED" : "Светлая");
-            var themeShortcutContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            themeShortcutContent.Children.Add(VectorIcons.Create(VectorIcons.Sun, _palette.SecondaryText, 12));
-            themeShortcutContent.Children.Add(new TextBlock
-            {
-                Text = currentThemeLabel,
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.PrimaryText,
-                Margin = new Thickness(4.5, 0, 0, 0)
-            });
-            var themeShortcutBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                themeShortcutContent,
-                () =>
+                var latest = _clipboard.Entries.OrderByDescending(entry => entry.CopiedAt).FirstOrDefault();
+                if (latest == null) _navigateToTab?.Invoke(1);
+                else
                 {
-                    if (_settings.Current.Theme == AppThemeMode.Light) _settings.Current.Theme = AppThemeMode.Dark;
-                    else if (_settings.Current.Theme == AppThemeMode.Dark) _settings.Current.Theme = AppThemeMode.Ios26Glass;
-                    else _settings.Current.Theme = AppThemeMode.Light;
-                    _settings.Save();
-                    _onSettingsChanged?.Invoke();
-                },
-                false, false, 7, new Thickness(6, 5, 6, 5), "Быстрое переключение темы (Светлая → OLED → iOS 26 Glass)");
-            Grid.SetColumn(themeShortcutBtn, 4);
-            shortcutsGrid.Children.Add(themeShortcutBtn);
-
-            Grid.SetRow(shortcutsGrid, 2);
-            layoutGrid.Children.Add(shortcutsGrid);
-
-            // --- Row 3: Auto-Retract Status Bar ---
-            var quickRow = new Grid();
-            quickRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            quickRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var quickLabelStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            quickLabelStack.Children.Add(VectorIcons.Create(VectorIcons.Settings, _palette.MutedText, 12.5));
-            var autoHideLabel = new TextBlock
-            {
-                Text = _settings.Current.AutoRetractOnIdle ? "Скрытие за край в покое: ВКЛ" : "Скрытие за край в покое: ВЫКЛ",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.SecondaryText,
-                Margin = new Thickness(6, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center
+                    _clipboard.CopyEntryToSystemClipboard(latest);
+                    clipboardHint.Hint.Text = "Фрагмент в буфере";
+                    ThemeTokens.Reveal(clipboardHint.Hint, 2, 170);
+                }
             };
-            quickLabelStack.Children.Add(autoHideLabel);
-            Grid.SetColumn(quickLabelStack, 0);
-            quickRow.Children.Add(quickLabelStack);
+            Grid.SetRow(actions, 2);
+            layoutGrid.Children.Add(actions);
 
-            var toggleIdleBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                new TextBlock
+            (Button Button, TextBlock Hint) AddAction(string icon, string name, string description, Action action)
+            {
+                var line = new DockPanel();
+                var glyph = VectorIcons.Create(icon, _palette.SecondaryText, 14);
+                glyph.Margin = new Thickness(0, 0, 9, 0);
+                DockPanel.SetDock(glyph, Dock.Left);
+                line.Children.Add(glyph);
+                var labels = new StackPanel();
+                labels.Children.Add(new TextBlock { Text = name, Foreground = _palette.PrimaryText, FontSize = 12, FontWeight = FontWeights.SemiBold });
+                var hint = new TextBlock { Text = description, Foreground = _palette.SecondaryText, FontSize = 10.5, TextTrimming = TextTrimming.CharacterEllipsis };
+                labels.Children.Add(hint);
+                line.Children.Add(labels);
+                var button = new Button
                 {
-                    Text = _settings.Current.AutoRetractOnIdle ? "Активно" : "Включить",
-                    FontFamily = ThemeTokens.UiFont,
-                    FontSize = 10.5,
-                    Foreground = _palette.PrimaryText
-                },
-                () =>
-                {
-                    _settings.Current.AutoRetractOnIdle = !_settings.Current.AutoRetractOnIdle;
-                    _settings.Save();
-                    _onSettingsChanged?.Invoke();
-                },
-                false, false, 5, new Thickness(7, 3, 7, 3), "Прятать остров вверх за край экрана в бездействии, чтобы не мешать кликам в окнах");
-            Grid.SetColumn(toggleIdleBtn, 1);
-            quickRow.Children.Add(toggleIdleBtn);
-
-            Grid.SetRow(quickRow, 3);
-            layoutGrid.Children.Add(quickRow);
+                    Content = line, Background = _palette.RaisedBackground, Padding = new Thickness(10, 6, 10, 6),
+                    Margin = new Thickness(0, 0, 0, 5), HorizontalContentAlignment = HorizontalAlignment.Stretch
+                };
+                button.SetResourceReference(StyleProperty, "IslandPlayerButton");
+                button.Click += (s, e) => action();
+                actions.Children.Add(button);
+                return (button, hint);
+            }
 
             card.Child = layoutGrid;
             return card;
@@ -1553,10 +1482,9 @@ namespace WindowsDynamicIsland.UI.Views
 
         private void RefreshPowerUi()
         {
-            if (_powerNormalPanel == null) return;
+            if (_powerConfirmPanel == null) return;
             if (_sys.PendingPowerAction != PowerActionKind.None)
             {
-                _powerNormalPanel.Visibility = Visibility.Collapsed;
                 _powerConfirmPanel.Visibility = Visibility.Collapsed;
                 _powerCountdownPanel.Visibility = Visibility.Visible;
                 string act = _sys.PendingPowerAction == PowerActionKind.Shutdown ? "Выключение" : "Перезагрузка";
@@ -1564,63 +1492,88 @@ namespace WindowsDynamicIsland.UI.Views
             }
             else if (_confirmingPowerKind != PowerActionKind.None)
             {
-                _powerNormalPanel.Visibility = Visibility.Collapsed;
                 _powerConfirmPanel.Visibility = Visibility.Visible;
                 _powerCountdownPanel.Visibility = Visibility.Collapsed;
             }
             else
             {
-                _powerNormalPanel.Visibility = Visibility.Visible;
                 _powerConfirmPanel.Visibility = Visibility.Collapsed;
                 _powerCountdownPanel.Visibility = Visibility.Collapsed;
             }
         }
 
+        private void UpdateLyricsVisibility()
+        {
+            _dashboardDetails.Visibility = _showLyrics ? Visibility.Collapsed : Visibility.Visible;
+            _lyricsCard.Visibility = _showLyrics ? Visibility.Visible : Visibility.Collapsed;
+            _lyricsView.Visibility = _lyricsCard.Visibility;
+            _lyricsButton.Content = _showLyrics ? "Скрыть текст" : "Текст песни";
+        }
+
         private void RefreshMediaUi()
         {
             if (_trackTitleText == null) return;
+            if (_renderedTrackVersion != _media.TrackVersion)
+            {
+                _renderedTrackVersion = _media.TrackVersion;
+                _seekStatus.Text = string.Empty;
+            }
             _trackTitleText.Text = _media.Title;
             _trackArtistText.Text = _media.Artist;
-            if (_trackSourceSubtitle != null)
-            {
-                _trackSourceSubtitle.Text = _media.IsPlaying
-                    ? "Активный аудиопоток • Системный плеер"
-                    : "Воспроизведение на паузе";
-            }
-            if (_mediaStatusText != null)
-            {
-                _mediaStatusText.Text = _media.IsPlaying ? "В ЭФИРЕ" : "ПАУЗА";
-                _mediaStatusText.Foreground = _media.IsPlaying ? _palette.Positive : _palette.MutedText;
-            }
-
-            if (_media.AlbumCover != null)
+            if (!ReferenceEquals(_albumImage.Source, _media.AlbumCover))
             {
                 _albumImage.Source = _media.AlbumCover;
-                _albumImage.Visibility = Visibility.Visible;
-                _albumFallbackIcon.Visibility = Visibility.Collapsed;
+                if (_media.AlbumCover != null) ThemeTokens.Reveal(_albumImage, 3, 230);
             }
-            else
-            {
-                _albumImage.Visibility = Visibility.Collapsed;
-                _albumFallbackIcon.Visibility = Visibility.Visible;
-            }
+            _albumImage.Visibility = _media.AlbumCover == null ? Visibility.Collapsed : Visibility.Visible;
+            _albumFallbackIcon.Visibility = _media.AlbumCover == null ? Visibility.Visible : Visibility.Collapsed;
+            _playPauseIcon.Data = Geometry.Parse(_media.IsPlaying ? VectorIcons.Pause : VectorIcons.Play);
+            RefreshTimelineUi();
+        }
 
-            if (_playPauseIcon != null)
+        private void RefreshTimelineUi()
+        {
+            if (_seekSlider == null) return;
+            _lyricsView?.Refresh();
+            if (_dragTrackVersion.HasValue) return;
+
+            _updatingSeekSlider = true;
+            try
             {
-                _playPauseIcon.Data = Geometry.Parse(_media.IsPlaying ? VectorIcons.Pause : VectorIcons.Play);
-                _playPauseIcon.Stroke = _palette.OnAccentText;
+                _seekSlider.Maximum = _media.Duration.TotalSeconds;
+                _seekSlider.Value = _media.Position.TotalSeconds;
+                _seekSlider.IsEnabled = _media.CanSeek;
+                _seekSlider.Opacity = _media.CanSeek ? 1.0 : 0.55;
+                _seekSlider.ToolTip = _media.CanSeek ? "Перемотка трека" : "Плеер не разрешает перемотку";
+            }
+            finally
+            {
+                _updatingSeekSlider = false;
             }
             _timePositionText.Text = FormatMediaTime(_media.Position);
             _timeDurationText.Text = FormatMediaTime(_media.Duration);
-            UpdateMediaProgressWidth();
+            if (!_media.CanSeek && _media.HasActiveSession && string.IsNullOrEmpty(_seekStatus.Text))
+                _seekStatus.Text = "Плеер не разрешает перемотку";
+            else if (_media.CanSeek && _seekStatus.Text == "Плеер не разрешает перемотку")
+                _seekStatus.Text = string.Empty;
         }
 
-        private void UpdateMediaProgressWidth()
+        private void PreviewSeek(MouseEventArgs e)
         {
-            if (_progressTrack == null || _progressFill == null) return;
-            double totalW = _progressTrack.ActualWidth;
-            if (totalW <= 0) totalW = 220;
-            _progressFill.Width = Math.Max(0, Math.Min(totalW, totalW * _media.ProgressRatio));
+            var track = _seekSlider.Template.FindName("PART_Track", _seekSlider) as Track;
+            if (track == null) return;
+            double value = track.ValueFromPoint(e.GetPosition(track));
+            if (!double.IsNaN(value) && !double.IsInfinity(value)) _seekSlider.Value = value;
+        }
+
+        private async System.Threading.Tasks.Task SeekFromSliderAsync()
+        {
+            int track = _media.TrackVersion;
+            _seekStatus.Text = string.Empty;
+            bool accepted = await _media.SeekAsync(TimeSpan.FromSeconds(_seekSlider.Value), track);
+            if (track == _media.TrackVersion && !accepted)
+                _seekStatus.Text = "Перемотка недоступна";
+            RefreshTimelineUi();
         }
 
         private static string FormatMediaTime(TimeSpan ts)
