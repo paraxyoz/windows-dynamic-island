@@ -20,7 +20,6 @@ namespace WindowsDynamicIsland.UI
         public Brush HoverBackground { get; set; }
         public Brush HairlineBorder { get; set; }
         public Brush SubtleBorder { get; set; }
-        public Brush SpecularTopRim { get; set; }
         public Color ShadowColor { get; set; }
         public double ShadowOpacity { get; set; }
         public SolidColorBrush PrimaryText { get; set; }
@@ -67,11 +66,6 @@ namespace WindowsDynamicIsland.UI
                         (0.0, Color.FromArgb(104, 255, 255, 255)),
                         (0.37, Color.FromArgb(37, 255, 255, 255)),
                         (1.0, Color.FromArgb(55, 227, 235, 253))),
-                    SpecularTopRim = MakeLinearGradient(
-                        new Point(0, 0), new Point(1, 0),
-                        (0.0, Color.FromArgb(0, 255, 255, 255)),
-                        (0.44, Color.FromArgb(128, 255, 255, 255)),
-                        (1.0, Color.FromArgb(0, 255, 255, 255))),
                     ShadowColor = Color.FromRgb(0, 0, 0),
                     ShadowOpacity = 0.28,
                     PrimaryText = MakeBrush(255, 249, 250, 255),
@@ -107,7 +101,6 @@ namespace WindowsDynamicIsland.UI
                     HoverBackground = MakeBrush(255, 228, 228, 233),       // #E4E4E9
                     HairlineBorder = MakeBrush(255, 229, 229, 233),        // #E5E5E9
                     SubtleBorder = MakeBrush(255, 212, 212, 218),          // #D4D4DA
-                    SpecularTopRim = MakeBrush(210, 255, 255, 255),        // Soft white top rim
                     ShadowColor = Color.FromRgb(24, 24, 30),
                     ShadowOpacity = 0.16,
                     PrimaryText = MakeBrush(255, 32, 33, 36),              // #202124
@@ -134,7 +127,6 @@ namespace WindowsDynamicIsland.UI
                 HoverBackground = MakeBrush(255, 25, 25, 31),               // #19191F Soft Dark Hover
                 HairlineBorder = MakeBrush(255, 26, 26, 32),                // #1A1A20 Crisp Dark Hairline
                 SubtleBorder = MakeBrush(255, 52, 52, 62),                  // #34343E Active Pill Border
-                SpecularTopRim = MakeBrush(16, 255, 255, 255),              // Whisper-quiet top rim
                 ShadowColor = Color.FromRgb(0, 0, 0),
                 ShadowOpacity = 0.65,
                 PrimaryText = MakeBrush(255, 232, 232, 237),                // #E8E8ED Soft Non-Accent White
@@ -232,7 +224,7 @@ namespace WindowsDynamicIsland.UI
             {
                 Background = p.CardBackground,
                 BorderBrush = p.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(cornerRadius),
                 Padding = padding ?? new Thickness(12),
                 SnapsToDevicePixels = true,
@@ -268,82 +260,71 @@ namespace WindowsDynamicIsland.UI
         }
 
         public static Border CreateInteractiveButton(
-            ThemePalette p,
-            UIElement content,
-            Action onClick,
-            bool isPrimary = false,
-            bool isDestructive = false,
-            double cornerRadius = 7,
-            Thickness? padding = null,
+            ThemePalette p, UIElement content, Action onClick, bool isPrimary = false,
+            bool isDestructive = false, double cornerRadius = 7, Thickness? padding = null,
             string tooltip = null)
         {
-            Brush normalBg = isDestructive ? p.DestructiveSubtle : (isPrimary ? p.Accent : p.RaisedBackground);
-            Brush hoverBg = isDestructive ? p.Destructive : (isPrimary ? (p.IsLight ? p.Accent : p.HoverBackground) : p.HoverBackground);
-            Brush borderBr = isDestructive ? p.Destructive : (isPrimary ? (p.IsLight ? p.Accent : p.SubtleBorder) : p.HairlineBorder);
-            Thickness effectivePad = padding ?? new Thickness(10, 5, 10, 5);
-
-            var scale = new ScaleTransform(1.0, 1.0);
-            var border = new Border
+            var button = new Button
             {
-                Background = normalBg,
-                BorderBrush = borderBr,
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(cornerRadius),
-                Padding = new Thickness(0),
-                Cursor = Cursors.Hand,
-                RenderTransformOrigin = new Point(0.5, 0.5),
-                RenderTransform = scale,
-                SnapsToDevicePixels = true,
-                UseLayoutRounding = true,
-                Child = WrapContentWithGlassLayers(p, content, cornerRadius, isPrimary, effectivePad),
-                ToolTip = string.IsNullOrWhiteSpace(tooltip) ? null : tooltip
+                Content = content,
+                Background = isDestructive ? p.DestructiveSubtle : isPrimary ? p.Accent : p.RaisedBackground,
+                Foreground = isPrimary ? p.OnAccentText : p.PrimaryText,
+                HorizontalContentAlignment = content is Grid ? HorizontalAlignment.Stretch : HorizontalAlignment.Center,
+                Padding = padding ?? new Thickness(10, 5, 10, 5),
+                ToolTip = tooltip
             };
-
-            border.MouseEnter += (s, e) =>
-            {
-                border.Background = hoverBg;
-                if (p.IsGlass)
-                {
-                    border.BorderBrush = p.SubtleBorder;
-                }
-                else if (isPrimary)
-                {
-                    border.Opacity = 0.90;
-                }
-            };
-
-            border.MouseLeave += (s, e) =>
-            {
-                border.Background = normalBg;
-                border.BorderBrush = borderBr;
-                border.Opacity = 1.0;
-                AnimateScale(scale, 1.0);
-            };
-
-            border.MouseLeftButtonDown += (s, e) =>
-            {
-                e.Handled = true;
-                AnimateScale(scale, 0.97);
-            };
-
-            border.MouseLeftButtonUp += (s, e) =>
-            {
-                e.Handled = true;
-                AnimateScale(scale, 1.0);
-                onClick?.Invoke();
-            };
-
-            return border;
+            button.SetResourceReference(FrameworkElement.StyleProperty, "IslandPlayerButton");
+            if (!string.IsNullOrWhiteSpace(tooltip))
+                System.Windows.Automation.AutomationProperties.SetName(button, tooltip);
+            button.Click += (s, e) => { if (e.Source == button) onClick?.Invoke(); };
+            var host = new Border { CornerRadius = new CornerRadius(9), Child = button };
+            host.Background = button.Background;
+            button.SetBinding(Control.BackgroundProperty, new System.Windows.Data.Binding(nameof(Border.Background)) { Source = host });
+            // The button paints the rounded surface; the host also exposes the color to existing callers.
+            return host;
         }
 
-        private static void AnimateScale(ScaleTransform scale, double target)
+        public static UIElement CreateEmptyState(ThemePalette palette, string icon, string title, string hint, UIElement action = null)
         {
-            var anim = new DoubleAnimation(target, TimeSpan.FromMilliseconds(95))
+            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var emblem = new Border
             {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                Width = 48, Height = 48, CornerRadius = new CornerRadius(15),
+                Background = palette.AccentSubtle, HorizontalAlignment = HorizontalAlignment.Center,
+                Child = VectorIcons.Create(icon, palette.PrimaryText, 21)
             };
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+            stack.Children.Add(emblem);
+            stack.Children.Add(new TextBlock
+            {
+                Text = title, FontFamily = UiFont, FontSize = 18, FontWeight = FontWeights.SemiBold,
+                Foreground = palette.PrimaryText, HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 9, 0, 4)
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = hint, Foreground = palette.SecondaryText, FontSize = 12, MaxWidth = 330,
+                TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap
+            });
+            if (action is FrameworkElement button)
+            {
+                button.HorizontalAlignment = HorizontalAlignment.Center;
+                button.Margin = new Thickness(0, 12, 0, 0);
+                stack.Children.Add(button);
+            }
+            return stack;
+        }
+
+        public static void Reveal(FrameworkElement element, double distance = 7, int milliseconds = 220)
+        {
+            if (!SystemParameters.ClientAreaAnimation) return;
+            var offset = new TranslateTransform();
+            element.RenderTransform = offset;
+            var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+            var duration = TimeSpan.FromMilliseconds(milliseconds);
+            offset.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(distance, 0, duration)
+                { EasingFunction = easing, FillBehavior = FillBehavior.Stop });
+            element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.35, 1, duration)
+                { EasingFunction = easing, FillBehavior = FillBehavior.Stop });
         }
 
         public static TextBox CreateStyledTextBox(ThemePalette p, string placeholder, double fontSize = 12.5, bool multiline = false)

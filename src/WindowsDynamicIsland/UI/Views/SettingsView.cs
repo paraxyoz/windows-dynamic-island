@@ -63,7 +63,7 @@ namespace WindowsDynamicIsland.UI.Views
                 var btn = new Border
                 {
                     CornerRadius = new CornerRadius(8),
-                    BorderThickness = new Thickness(1),
+                    BorderThickness = new Thickness(0),
                     Padding = new Thickness(0),
                     Margin = new Thickness(0, 0, 6, 0),
                     Cursor = Cursors.Hand,
@@ -303,18 +303,44 @@ namespace WindowsDynamicIsland.UI.Views
             rightStack.Children.Add(CreateSectionTitle("Интеграция с Windows 11"));
             rightStack.Children.Add(CreateToggleRow("Запускать вместе с Windows", s.AutoStartWithWindows, v => { s.AutoStartWithWindows = v; SaveQuiet(); }));
             rightStack.Children.Add(CreateToggleRow("Отображать системные уведомления", s.ShowSystemNotifications, v => { s.ShowSystemNotifications = v; SaveQuiet(); }));
+            var notificationStatus = new TextBlock
+            {
+                Foreground = _palette.SecondaryText, FontSize = 11, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            void UpdateNotificationStatus()
+            {
+                notificationStatus.Text = _system.NotificationsListenerActive
+                    ? "Остров получает системные уведомления."
+                    : "Для доступа к уведомлениям откройте MSIX-версию острова и подтвердите запрос Windows.";
+            }
             var notificationSettings = new System.Windows.Controls.Button
             {
-                Content = "Доступ к уведомлениям Windows",
+                Content = "Подключить уведомления",
                 Foreground = _palette.PrimaryText,
                 Background = _palette.RaisedBackground,
-                BorderBrush = _palette.HairlineBorder,
                 Padding = new Thickness(9, 5, 9, 5),
-                Margin = new Thickness(0, 4, 0, 8),
+                Margin = new Thickness(0, 4, 0, 6),
                 HorizontalAlignment = HorizontalAlignment.Left
             };
             notificationSettings.SetResourceReference(StyleProperty, "IslandPlayerButton");
-            notificationSettings.Click += (sender, args) =>
+            notificationSettings.Click += async (sender, args) =>
+            {
+                notificationSettings.IsEnabled = false;
+                await _system.InitializeNotificationListenerAsync(requestAccess: true);
+                UpdateNotificationStatus();
+                notificationSettings.IsEnabled = true;
+            };
+            var privacySettings = new System.Windows.Controls.Button
+            {
+                Content = "Разрешения Windows",
+                Foreground = _palette.PrimaryText,
+                Background = _palette.RaisedBackground,
+                Padding = new Thickness(9, 5, 9, 5),
+                Margin = new Thickness(6, 4, 0, 6)
+            };
+            privacySettings.SetResourceReference(StyleProperty, "IslandPlayerButton");
+            privacySettings.Click += (sender, args) =>
             {
                 try
                 {
@@ -323,18 +349,12 @@ namespace WindowsDynamicIsland.UI.Views
                 }
                 catch (Exception ex) { StorageService.LogError("OpenNotificationSettings", ex); }
             };
-            rightStack.Children.Add(notificationSettings);
-            if (s.ShowSystemNotifications && !_system.NotificationsListenerActive)
-            {
-                rightStack.Children.Add(new TextBlock
-                {
-                    Text = "Windows не предоставила этой сборке доступ к уведомлениям.",
-                    Foreground = _palette.SecondaryText,
-                    FontSize = 11,
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 0, 0, 8)
-                });
-            }
+            var permissionActions = new StackPanel { Orientation = Orientation.Horizontal };
+            permissionActions.Children.Add(notificationSettings);
+            permissionActions.Children.Add(privacySettings);
+            rightStack.Children.Add(permissionActions);
+            UpdateNotificationStatus();
+            rightStack.Children.Add(notificationStatus);
             rightStack.Children.Add(CreateToggleRow("Работать поверх полноэкранных окон", s.AllowOverFullscreenApps, v => { s.AllowOverFullscreenApps = v; SaveQuiet(); }));
             rightStack.Children.Add(CreateToggleRow("Плавно прятать в полноэкранных играх", s.HideInFullscreenApps, v => { s.HideInFullscreenApps = v; SaveQuiet(); }));
 

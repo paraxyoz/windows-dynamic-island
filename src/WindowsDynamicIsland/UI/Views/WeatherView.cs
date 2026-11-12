@@ -85,7 +85,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.CardBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(7),
                 Padding = new Thickness(8, 4, 8, 4)
             };
@@ -314,7 +314,6 @@ namespace WindowsDynamicIsland.UI.Views
             topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var titleStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            titleStack.Children.Add(VectorIcons.Create(VectorIcons.GetWeatherIconPath(snap.WeatherCode), _palette.PrimaryText, 16));
             titleStack.Children.Add(new TextBlock
             {
                 Text = city.Name,
@@ -322,7 +321,7 @@ namespace WindowsDynamicIsland.UI.Views
                 FontSize = 14,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = _palette.PrimaryText,
-                Margin = new Thickness(7, 0, 0, 0),
+                Margin = new Thickness(0),
                 VerticalAlignment = VerticalAlignment.Center
             });
             Grid.SetColumn(titleStack, 0);
@@ -361,45 +360,28 @@ namespace WindowsDynamicIsland.UI.Views
             topRow.Children.Add(actions);
             stack.Children.Add(topRow);
 
-            // Big Temperature + Condition
-            var heroRow = new Grid { Margin = new Thickness(0, 4, 0, 8) };
-            heroRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            heroRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
-            heroRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var tempText = new TextBlock
+            var heroRow = new DockPanel { Margin = new Thickness(0, 0, 0, 7) };
+            var mascot = new WeatherMascot(snap.WeatherCode);
+            DockPanel.SetDock(mascot, Dock.Right);
+            heroRow.Children.Add(mascot);
+            var conditions = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            conditions.Children.Add(new TextBlock
             {
                 Text = _weather.FormatTemperature(snap.CurrentTemp),
-                FontFamily = ThemeTokens.MonoFont,
-                FontSize = 28,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = _palette.PrimaryText,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetColumn(tempText, 0);
-            heroRow.Children.Add(tempText);
-
-            var condStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            condStack.Children.Add(new TextBlock
+                FontFamily = ThemeTokens.UiFont, FontSize = 36, FontWeight = FontWeights.SemiBold,
+                Foreground = _palette.PrimaryText
+            });
+            conditions.Children.Add(new TextBlock
             {
-                Text = snap.ConditionDescription,
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 12,
-                FontWeight = FontWeights.Medium,
-                Foreground = _palette.PrimaryText,
+                Text = snap.ConditionDescription, FontSize = 12, Foreground = _palette.PrimaryText,
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
-            condStack.Children.Add(new TextBlock
+            conditions.Children.Add(new TextBlock
             {
-                Text = $"Ощущается {_weather.FormatTemperature(snap.FeelsLike)} • ↑{_weather.FormatTemperature(snap.TempMax)} ↓{_weather.FormatTemperature(snap.TempMin)}",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 10.5,
-                Foreground = _palette.MutedText,
-                Margin = new Thickness(0, 1, 0, 0),
-                TextTrimming = TextTrimming.CharacterEllipsis
+                Text = $"Ощущается {_weather.FormatTemperature(snap.FeelsLike)}",
+                FontSize = 11, Foreground = _palette.MutedText, Margin = new Thickness(0, 2, 0, 0)
             });
-            Grid.SetColumn(condStack, 2);
-            heroRow.Children.Add(condStack);
+            heroRow.Children.Add(conditions);
             stack.Children.Add(heroRow);
 
             // 3 Telemetry Pills: Humidity, Wind, Precipitation
@@ -450,7 +432,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(7, 4, 7, 4),
                 Child = stack
@@ -571,7 +553,7 @@ namespace WindowsDynamicIsland.UI.Views
                 {
                     Background = _palette.RaisedBackground,
                     BorderBrush = _palette.HairlineBorder,
-                    BorderThickness = new Thickness(1),
+                    BorderThickness = new Thickness(0),
                     CornerRadius = new CornerRadius(6),
                     Padding = new Thickness(3, 6, 3, 6),
                     Margin = new Thickness(i == 0 ? 0 : 2, 0, i == pageItems.Count - 1 ? 0 : 2, 0),

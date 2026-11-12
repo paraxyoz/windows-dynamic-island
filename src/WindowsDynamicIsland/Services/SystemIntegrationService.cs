@@ -48,6 +48,7 @@ namespace WindowsDynamicIsland.Services
 
         private UserNotificationListener _notificationListener;
         private bool _notificationsSupported;
+        private bool _requestingNotificationAccess;
         private bool _disposed;
 
         // Power management countdown
@@ -267,25 +268,29 @@ namespace WindowsDynamicIsland.Services
             });
         }
 
-        public async Task InitializeNotificationListenerAsync()
+        public async Task InitializeNotificationListenerAsync(bool requestAccess = false)
         {
+            if (_disposed || _notificationsSupported || _requestingNotificationAccess) return;
+            _requestingNotificationAccess = true;
             try
             {
                 _notificationListener = UserNotificationListener.Current;
-                var access = await _notificationListener.RequestAccessAsync();
+                var access = _notificationListener.GetAccessStatus();
+                if (requestAccess && access == UserNotificationListenerAccessStatus.Unspecified)
+                    access = await _notificationListener.RequestAccessAsync();
                 if (_disposed) return;
-                if (access != UserNotificationListenerAccessStatus.Allowed)
-                {
-                    StorageService.LogInfo("Windows notification access: " + access);
-                    return;
-                }
-                _notificationsSupported = true;
+                StorageService.LogInfo("Windows notification access: " + access);
+                if (access != UserNotificationListenerAccessStatus.Allowed) return;
                 _notificationListener.NotificationChanged += OnWindowsNotificationChanged;
+                _notificationsSupported = true;
             }
             catch (Exception ex)
             {
-                _notificationsSupported = false;
                 StorageService.LogError(nameof(InitializeNotificationListenerAsync), ex);
+            }
+            finally
+            {
+                _requestingNotificationAccess = false;
             }
         }
 
@@ -298,8 +303,8 @@ namespace WindowsDynamicIsland.Services
                 if (toast == null) return;
                 var appName = toast.AppInfo?.DisplayInfo?.DisplayName;
                 var appId = toast.AppInfo?.AppUserModelId;
-                bool telegram = (appName?.IndexOf("Telegram", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
-                                (appId?.IndexOf("Telegram", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0;
+                string messenger = IdentifyMessenger(appName, appId);
+                bool telegram = messenger == "Telegram";
                 var binding = toast.Notification?.Visual?.GetBinding(KnownNotificationBindings.ToastGeneric);
                 var texts = binding?.GetTextElements()?.Select(t => t.Text?.Trim())
                     .Where(t => !string.IsNullOrWhiteSpace(t)).ToList() ?? new List<string>();
@@ -320,8 +325,8 @@ namespace WindowsDynamicIsland.Services
                         Priority = IslandEventPriority.High,
                         Title = senderName,
                         Subtitle = string.IsNullOrWhiteSpace(body) ? "Новое уведомление" : body,
-                        BadgeText = telegram ? "Telegram" : appName ?? "Windows",
-                        DurationMs = telegram ? 8500 : 5600,
+                        BadgeText = messenger ?? appName ?? "Windows",
+                        DurationMs = messenger != null ? 8500 : 5600,
                         Mood = SmileyMood.NotificationAlert,
                         PrimaryActionLabel = chat != null ? "Открыть " + senderName : "Уведомления"
                     };
@@ -337,6 +342,16 @@ namespace WindowsDynamicIsland.Services
             {
                 StorageService.LogError(nameof(OnWindowsNotificationChanged), ex);
             }
+        }
+
+        private static string IdentifyMessenger(string displayName, string appId)
+        {
+            string identity = displayName + " " + appId;
+            foreach (string name in new[] { "Telegram", "WhatsApp", "Signal", "Discord", "Teams", "Slack", "Viber", "Messenger" })
+            {
+                if (identity.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0) return name;
+            }
+            return null;
         }
 
         public static Uri TelegramChatUri(string senderName)

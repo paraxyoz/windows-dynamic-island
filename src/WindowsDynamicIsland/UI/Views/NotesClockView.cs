@@ -22,6 +22,8 @@ namespace WindowsDynamicIsland.UI.Views
         private readonly NotesManager _notes;
         private readonly TimerService _timers;
         private ThemePalette _palette;
+        private readonly bool _clockOnly;
+        private UIElement _editorEmpty;
 
         // Notes UI (Master List + Detail Editor)
         private Grid _notesListViewGrid;
@@ -53,46 +55,23 @@ namespace WindowsDynamicIsland.UI.Views
         private TextBlock _stopwatchStartPauseText;
         private StackPanel _lapsListPanel;
 
-        public NotesClockView(SettingsManager settings, NotesManager notes, TimerService timers)
+        public NotesClockView(SettingsManager settings, NotesManager notes, TimerService timers, bool clockOnly = false)
         {
             _settings = settings;
             _notes = notes;
             _timers = timers;
 
-            _notes.NotesChanged += OnExternalNotesChanged;
-            _timers.TimerTick += RefreshTimerDisplay;
-            _timers.StopwatchTick += RefreshStopwatchDisplay;
-
-            EnsureInitialNote();
+            _clockOnly = clockOnly;
+            if (clockOnly)
+            {
+                _timers.TimerTick += RefreshTimerDisplay;
+                _timers.StopwatchTick += RefreshStopwatchDisplay;
+            }
+            else
+            {
+                _notes.NotesChanged += OnExternalNotesChanged;
+            }
             RebuildTheme();
-        }
-
-        private void EnsureInitialNote()
-        {
-            if (_notes.Notes.Count == 0 ||
-                (_notes.Notes.Count == 1 && _notes.Notes[0].Title == "Первая заметка"))
-            {
-                if (_notes.Notes.Count == 1)
-                {
-                    _notes.DeleteNote(_notes.Notes[0].Id);
-                }
-                _notes.CreateNote(
-                    "Идеи и быстрые ссылки",
-                    "Каждая заметка теперь хранится отдельно в списке. Нажмите «+ Новая», чтобы добавить ещё одну.");
-                _notes.CreateNote(
-                    "Напоминание о задаче",
-                    "Нажмите на заметку, чтобы изменить время напоминания (+5м, +15м, +1ч или ЧЧ:ММ) либо отключить его кнопкой «Выкл ✕».",
-                    DateTime.Now.AddMinutes(30));
-                var pinned = _notes.CreateNote(
-                    "Список задач на сегодня",
-                    "1. Проверить список отдельных заметок\n2. Отредактировать текст по клику\n3. Изменить или отключить напоминание");
-                _notes.TogglePin(pinned.Id);
-                _selectedNoteId = pinned.Id;
-            }
-            else if (string.IsNullOrEmpty(_selectedNoteId) || !_notes.Notes.Any(n => n.Id == _selectedNoteId))
-            {
-                _selectedNoteId = _notes.Notes[0].Id;
-            }
         }
 
         private void OnExternalNotesChanged()
@@ -108,26 +87,13 @@ namespace WindowsDynamicIsland.UI.Views
             }
         }
 
-        public void SwitchSubTab(int index)
-        {
-            if (index == 0)
-            {
-                if (_isEditingNote) _noteContentBox?.Focus();
-                else _noteSearchBox?.Focus();
-            }
-            else if (index == 1)
-            {
-                _timerMinBox?.Focus();
-            }
-        }
-
         public void OpenFirstNoteEditor()
         {
-            EnsureInitialNote();
             if (_notes.Notes.Count > 0)
             {
                 OpenNoteEditor(_notes.Notes[0].Id, false);
             }
+            else CreateNewNoteAndOpenEditor();
         }
 
         public void ShowNotesList()
@@ -138,65 +104,46 @@ namespace WindowsDynamicIsland.UI.Views
         public void RebuildTheme()
         {
             _palette = ThemeTokens.GetPalette(_settings.Current.Theme, 1.0);
-            EnsureInitialNote();
 
-            // Asymmetric 2-column layout: Left = Primary Notes Workspace (1.68*), Right = Compact Timer + Stopwatch (1.0*)
             var root = new Grid();
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.68, GridUnitType.Star) });
+            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(_clockOnly ? 1 : 0.65, GridUnitType.Star) });
             root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
-
-            // 1. Primary Block: Separate Notes List & Note Editor
-            var notesWorkspace = BuildNotesPrimaryBlock();
-            Grid.SetColumn(notesWorkspace, 0);
-            root.Children.Add(notesWorkspace);
-
-            // 2. Auxiliary Right Column: Compact Timer (Top) + Compact Stopwatch (Bottom)
-            var rightColumn = new Grid();
-            rightColumn.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            rightColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(8) });
-            rightColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-
-            var timerBlock = BuildCompactTimerBlock();
-            Grid.SetRow(timerBlock, 0);
-            rightColumn.Children.Add(timerBlock);
-
-            var stopwatchBlock = BuildCompactStopwatchBlock();
-            Grid.SetRow(stopwatchBlock, 2);
-            rightColumn.Children.Add(stopwatchBlock);
-
-            Grid.SetColumn(rightColumn, 2);
-            root.Children.Add(rightColumn);
-
-            Content = root;
-
-            RefreshNotesList();
-            if (_isEditingNote)
+            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            if (_clockOnly)
             {
-                OpenNoteEditor(_selectedNoteId);
+                var timer = BuildCompactTimerBlock();
+                var stopwatch = BuildCompactStopwatchBlock();
+                Grid.SetColumn(stopwatch, 2);
+                root.Children.Add(timer);
+                root.Children.Add(stopwatch);
+                Content = root;
+                RefreshTimerDisplay();
+                RefreshStopwatchDisplay();
+                RefreshStopwatchLaps();
+                return;
             }
-            RefreshTimerDisplay();
-            RefreshStopwatchDisplay();
-            RefreshStopwatchLaps();
-        }
 
-        // ==================== ГЛАВНЫЙ БЛОК: СПИСОК ОТДЕЛЬНЫХ ЗАМЕТОК + РЕДАКТОР ====================
-        private UIElement BuildNotesPrimaryBlock()
-        {
-            var card = ThemeTokens.CreateCard(_palette, 12, new Thickness(12, 10, 12, 10));
-            var host = new Grid();
-
+            var list = ThemeTokens.CreateCard(_palette, 15, new Thickness(12));
             _notesListViewGrid = BuildNotesListView();
+            list.Child = _notesListViewGrid;
+            root.Children.Add(list);
+
+            var editor = ThemeTokens.CreateCard(_palette, 15, new Thickness(14));
+            var editorHost = new Grid();
             _noteEditorViewGrid = BuildNoteEditorView();
-
-            _notesListViewGrid.Visibility = _isEditingNote ? Visibility.Collapsed : Visibility.Visible;
+            _editorEmpty = ThemeTokens.CreateEmptyState(_palette, VectorIcons.Notes, "Место для мысли",
+                "Выберите заметку слева или создайте новую.");
+            editorHost.Children.Add(_editorEmpty);
+            editorHost.Children.Add(_noteEditorViewGrid);
+            editor.Child = editorHost;
+            Grid.SetColumn(editor, 2);
+            root.Children.Add(editor);
+            Content = root;
+            _isEditingNote = _selectedNoteId != null && _notes.Notes.Any(n => n.Id == _selectedNoteId);
             _noteEditorViewGrid.Visibility = _isEditingNote ? Visibility.Visible : Visibility.Collapsed;
-
-            host.Children.Add(_notesListViewGrid);
-            host.Children.Add(_noteEditorViewGrid);
-
-            card.Child = host;
-            return card;
+            _editorEmpty.Visibility = _isEditingNote ? Visibility.Collapsed : Visibility.Visible;
+            if (_isEditingNote) LoadSelectedNoteIntoEditor();
+            RefreshNotesList();
         }
 
         private Grid BuildNotesListView()
@@ -238,7 +185,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(5),
                 Padding = new Thickness(5, 1, 5, 1),
                 VerticalAlignment = VerticalAlignment.Center,
@@ -252,11 +199,11 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(7),
                 Padding = new Thickness(8, 4, 8, 4)
             };
-            var searchHost = ThemeTokens.CreateInputWithPlaceholder(_palette, "Поиск заметки...", out _noteSearchBox, 11.5, false);
+            var searchHost = ThemeTokens.CreateInputWithPlaceholder(_palette, "Поиск", out _noteSearchBox, 11.5, false);
             _noteSearchBox.TextChanged += (s, e) => RefreshNotesList();
             searchBorder.Child = searchHost;
             Grid.SetColumn(searchBorder, 2);
@@ -320,7 +267,7 @@ namespace WindowsDynamicIsland.UI.Views
                 _palette,
                 new TextBlock
                 {
-                    Text = "← К списку заметок",
+                    Text = "Закрыть",
                     FontFamily = ThemeTokens.UiFont,
                     FontSize = 11,
                     FontWeight = FontWeights.Medium,
@@ -366,7 +313,7 @@ namespace WindowsDynamicIsland.UI.Views
                 _palette,
                 new TextBlock
                 {
-                    Text = "Готово ✓",
+                    Text = "Готово",
                     FontFamily = ThemeTokens.UiFont,
                     FontSize = 11,
                     FontWeight = FontWeights.SemiBold,
@@ -385,7 +332,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(7),
                 Padding = new Thickness(9, 5, 9, 5),
                 Margin = new Thickness(0, 0, 0, 6)
@@ -402,7 +349,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(9, 7, 9, 7)
             };
@@ -472,7 +419,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(5),
                 Padding = new Thickness(4, 2, 4, 2),
                 Width = 46,
@@ -518,7 +465,7 @@ namespace WindowsDynamicIsland.UI.Views
             return grid;
         }
 
-        private void CreateNewNoteAndOpenEditor()
+        public void CreateNewNoteAndOpenEditor()
         {
             var created = _notes.CreateNote("", "");
             OpenNoteEditor(created.Id, focusTitle: true);
@@ -530,10 +477,15 @@ namespace WindowsDynamicIsland.UI.Views
             _selectedNoteId = noteId;
             _isEditingNote = true;
 
-            if (_notesListViewGrid != null) _notesListViewGrid.Visibility = Visibility.Collapsed;
-            if (_noteEditorViewGrid != null) _noteEditorViewGrid.Visibility = Visibility.Visible;
+            if (_editorEmpty != null) _editorEmpty.Visibility = Visibility.Collapsed;
+            if (_noteEditorViewGrid != null)
+            {
+                _noteEditorViewGrid.Visibility = Visibility.Visible;
+                ThemeTokens.Reveal(_noteEditorViewGrid, 4, 170);
+            }
 
             LoadSelectedNoteIntoEditor();
+            RefreshNotesList();
             if (focusTitle)
             {
                 _noteTitleBox?.Focus();
@@ -553,14 +505,15 @@ namespace WindowsDynamicIsland.UI.Views
                 if (current != null &&
                     string.IsNullOrWhiteSpace(current.Title) &&
                     string.IsNullOrWhiteSpace(current.Content) &&
-                    !current.ReminderAt.HasValue &&
-                    _notes.Notes.Count > 1)
+                    !current.ReminderAt.HasValue)
                 {
                     _notes.DeleteNote(_selectedNoteId);
                 }
             }
 
             _isEditingNote = false;
+            _selectedNoteId = null;
+            if (_editorEmpty != null) _editorEmpty.Visibility = Visibility.Visible;
             if (_noteEditorViewGrid != null) _noteEditorViewGrid.Visibility = Visibility.Collapsed;
             if (_notesListViewGrid != null) _notesListViewGrid.Visibility = Visibility.Visible;
             RefreshNotesList();
@@ -657,7 +610,7 @@ namespace WindowsDynamicIsland.UI.Views
                 FontWeight = FontWeights.SemiBold,
                 Foreground = _palette.PrimaryText,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                MaxWidth = 215,
+                MaxWidth = 138,
                 VerticalAlignment = VerticalAlignment.Center
             });
 
@@ -692,72 +645,20 @@ namespace WindowsDynamicIsland.UI.Views
             Grid.SetColumn(textStack, 0);
             rowGrid.Children.Add(textStack);
 
-            // Right: Active Reminder Badge (with quick disable!) + Pin + Delete
-            var actionsStack = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
             if (hasActiveReminder)
             {
-                var remRow = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-                remRow.Children.Add(VectorIcons.Create(VectorIcons.Bell, _palette.Positive, 11));
-                remRow.Children.Add(new TextBlock
-                {
-                    Text = note.ReminderAt.Value.ToString("HH:mm") + " ✕",
-                    FontFamily = ThemeTokens.MonoFont,
-                    FontSize = 10,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = _palette.Positive,
-                    Margin = new Thickness(4, 0, 0, 0),
-                    VerticalAlignment = VerticalAlignment.Center
-                });
-
-                var remPillBtn = ThemeTokens.CreateInteractiveButton(
-                    _palette,
-                    remRow,
-                    () =>
-                    {
-                        _notes.SetReminder(noteId, null);
-                        RefreshNotesList();
-                    },
-                    false, false, 5, new Thickness(6, 3, 6, 3), "Напоминание активно. Нажмите, чтобы отключить напоминание, или откройте заметку для смены времени");
-                remPillBtn.Margin = new Thickness(0, 0, 4, 0);
-                actionsStack.Children.Add(remPillBtn);
+                var reminder = VectorIcons.Create(VectorIcons.Bell, _palette.Positive, 13);
+                reminder.ToolTip = note.ReminderAt.Value.ToString("HH:mm");
+                Grid.SetColumn(reminder, 1);
+                rowGrid.Children.Add(reminder);
             }
-
-            var pinBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                VectorIcons.Create(VectorIcons.Pin, note.IsPinned ? _palette.PrimaryText : _palette.MutedText, 11.5),
-                () =>
-                {
-                    _notes.TogglePin(noteId);
-                    RefreshNotesList();
-                },
-                note.IsPinned, false, 6, new Thickness(6, 4, 6, 4), note.IsPinned ? "Открепить заметку" : "Закрепить заметку");
-            pinBtn.Margin = new Thickness(0, 0, 4, 0);
-            actionsStack.Children.Add(pinBtn);
-
-            var delBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                VectorIcons.Create(VectorIcons.Trash, _palette.MutedText, 11.5),
-                () =>
-                {
-                    _notes.DeleteNote(noteId);
-                    RefreshNotesList();
-                },
-                false, false, 6, new Thickness(6, 4, 6, 4), "Удалить заметку");
-            actionsStack.Children.Add(delBtn);
-
-            Grid.SetColumn(actionsStack, 1);
-            rowGrid.Children.Add(actionsStack);
 
             var cardBtn = ThemeTokens.CreateInteractiveButton(
                 _palette,
                 rowGrid,
                 () => OpenNoteEditor(noteId),
                 false, false, 9, new Thickness(11, 8, 11, 8), "Нажмите, чтобы отредактировать заметку и настроить напоминание");
+            if (_selectedNoteId == noteId) cardBtn.Background = _palette.AccentSubtle;
             cardBtn.Margin = new Thickness(0, 0, 0, 6);
             return cardBtn;
         }
@@ -774,9 +675,9 @@ namespace WindowsDynamicIsland.UI.Views
 
             header.Children.Add(new TextBlock
             {
-                Text = "Таймер",
+                Text = "Обратный отсчёт",
                 FontFamily = ThemeTokens.UiFont,
-                FontSize = 11.5,
+                FontSize = 17,
                 FontWeight = FontWeights.Medium,
                 Foreground = _palette.SecondaryText,
                 VerticalAlignment = VerticalAlignment.Center
@@ -794,7 +695,7 @@ namespace WindowsDynamicIsland.UI.Views
             header.Children.Add(_timerStatusBadge);
             stack.Children.Add(header);
 
-            var midGrid = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            var midGrid = new Grid { Margin = new Thickness(0, 22, 0, 20) };
             midGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             midGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -802,7 +703,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Text = _timers.FormattedTimerRemaining,
                 FontFamily = ThemeTokens.MonoFont,
-                FontSize = 23,
+                FontSize = 44,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = _palette.PrimaryText,
                 VerticalAlignment = VerticalAlignment.Center
@@ -846,7 +747,7 @@ namespace WindowsDynamicIsland.UI.Views
                     _palette,
                     new TextBlock
                     {
-                        Text = $"{mins}м",
+                        Text = $"{mins} мин",
                         FontFamily = ThemeTokens.MonoFont,
                         FontSize = 10.5,
                         Foreground = _palette.SecondaryText,
@@ -922,8 +823,18 @@ namespace WindowsDynamicIsland.UI.Views
             Grid.SetColumn(resetBtn, 2);
             btnGrid.Children.Add(resetBtn);
 
-            stack.Children.Add(btnGrid);
-            card.Child = stack;
+            stack.Children.Clear();
+            var timerControls = new StackPanel();
+            timerControls.Children.Add(presetsGrid);
+            timerControls.Children.Add(btnGrid);
+            var surface = new DockPanel();
+            DockPanel.SetDock(header, Dock.Top);
+            DockPanel.SetDock(timerControls, Dock.Bottom);
+            surface.Children.Add(header);
+            surface.Children.Add(timerControls);
+            midGrid.VerticalAlignment = VerticalAlignment.Center;
+            surface.Children.Add(midGrid);
+            card.Child = surface;
             return card;
         }
 
@@ -944,7 +855,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Text = "Секундомер",
                 FontFamily = ThemeTokens.UiFont,
-                FontSize = 11.5,
+                FontSize = 17,
                 FontWeight = FontWeights.Medium,
                 Foreground = _palette.SecondaryText,
                 VerticalAlignment = VerticalAlignment.Center
@@ -954,7 +865,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Text = _timers.FormattedStopwatch,
                 FontFamily = ThemeTokens.MonoFont,
-                FontSize = 16,
+                FontSize = 24,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = _palette.PrimaryText,
                 HorizontalAlignment = HorizontalAlignment.Right,
@@ -1047,7 +958,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(5),
                 Padding = new Thickness(4, 2, 4, 2),
                 Width = 30,

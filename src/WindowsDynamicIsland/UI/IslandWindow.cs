@@ -45,8 +45,8 @@ namespace WindowsDynamicIsland.UI
         private const double BaseQuickNoteHeight = 236.0;
         private const double BaseToastWidth = 380.0;
         private const double BaseToastHeight = 52.0;
-        private const double BaseExpandedWidth = 684.0;
-        private const double BaseExpandedHeight = 372.0;
+        private const double BaseExpandedWidth = 730.0;
+        private const double BaseExpandedHeight = 402.0;
 
         private readonly SettingsManager _settings;
         private readonly EventQueueManager _eventQueue;
@@ -87,13 +87,11 @@ namespace WindowsDynamicIsland.UI
         private TranslateTransform _dropTranslateTransform;
         private System.Windows.Shapes.Path _shadowPath;
         private System.Windows.Shapes.Path _liquidFillPath;
-        private System.Windows.Shapes.Path _liquidContourPath;
         private double _currentCornerRadius;
         private DropShadowEffect _shadowEffect;
         private Border _capsuleBorder;
         private Grid _innerRoot;
         private RectangleGeometry _innerClipGeometry;
-        private Border _specularTopLine;
         private ScaleTransform _scaleTransform;
 
         // 4 Morphological State Layers inside Capsule
@@ -149,6 +147,7 @@ namespace WindowsDynamicIsland.UI
         private ClipboardView _clipboardView;
         private ShelfView _shelfView;
         private NotesClockView _notesClockView;
+        private NotesClockView _clockView;
         private WeatherView _weatherView;
         private SettingsView _settingsView;
 
@@ -343,21 +342,6 @@ namespace WindowsDynamicIsland.UI
                 SnapsToDevicePixels = false
             };
 
-            // 5. _liquidContourPath renders the continuous 1px contour line along the exact outer droplet silhouette
-            _liquidContourPath = new System.Windows.Shapes.Path
-            {
-                Stroke = _palette.SubtleBorder,
-                StrokeThickness = 0.85,
-                Fill = null,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
-                IsHitTestVisible = false,
-                SnapsToDevicePixels = true
-            };
-
             _capsuleBorder = new Border
             {
                 Width = BaseCollapsedWidth,
@@ -387,20 +371,6 @@ namespace WindowsDynamicIsland.UI
                 Clip = _innerClipGeometry
             };
 
-            // 1px Specular top hairline highlight
-            _specularTopLine = new Border
-            {
-                Height = 1,
-                VerticalAlignment = VerticalAlignment.Top,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                Margin = new Thickness(16, 0, 16, 0),
-                Background = _palette.SpecularTopRim,
-                IsHitTestVisible = false,
-                Visibility = fusedTop ? Visibility.Collapsed : Visibility.Visible
-            };
-            System.Windows.Controls.Panel.SetZIndex(_specularTopLine, 20);
-            _innerRoot.Children.Add(_specularTopLine);
-
             // Build the 4 morphological state layers
             _collapsedLayer = BuildCollapsedLayer();
             _quickNoteLayer = BuildQuickNoteLayer();
@@ -422,7 +392,6 @@ namespace WindowsDynamicIsland.UI
             capsuleAndEarsGrid.Children.Add(_shadowPath);
             capsuleAndEarsGrid.Children.Add(_liquidFillPath);
             capsuleAndEarsGrid.Children.Add(_capsuleBorder);
-            capsuleAndEarsGrid.Children.Add(_liquidContourPath);
 
             _dropMorphContainer.Children.Add(capsuleAndEarsGrid);
             _islandHostGrid.Children.Add(_dropMorphContainer);
@@ -525,7 +494,7 @@ namespace WindowsDynamicIsland.UI
             {
                 Background = _palette.AccentSubtle,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(9),
                 Padding = new Thickness(6, 2, 6, 2),
                 Margin = new Thickness(0, 0, 4, 0),
@@ -543,8 +512,7 @@ namespace WindowsDynamicIsland.UI
             _collapsedTimerPill.MouseLeftButtonUp += (s, e) =>
             {
                 e.Handled = true;
-                SwitchTab(3);
-                _notesClockView?.SwitchSubTab(1);
+                SwitchTab(6);
                 SetExpandedState(true);
             };
             rightStack.Children.Add(_collapsedTimerPill);
@@ -566,7 +534,7 @@ namespace WindowsDynamicIsland.UI
                 Height = 22,
                 Background = _palette.RaisedBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(9),
                 ToolTip = "Быстрая заметка (открывает компактный блокнот без разворачивания всего острова)",
                 Child = notesBtnHost
@@ -719,7 +687,7 @@ namespace WindowsDynamicIsland.UI
             {
                 Background = _palette.CardBackground,
                 BorderBrush = _palette.HairlineBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(10, 8, 10, 8),
                 Child = ThemeTokens.CreateInputWithPlaceholder(_palette, _quickNoteEditorBox, "Введите заметку или список задач...", 12, true)
@@ -912,7 +880,7 @@ namespace WindowsDynamicIsland.UI
             {
                 Background = _palette.Accent,
                 BorderBrush = _palette.IsLight ? _palette.Accent : _palette.SubtleBorder,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(7),
                 Padding = new Thickness(8, 3, 8, 3),
                 Margin = new Thickness(0, 0, 10, 0),
@@ -1051,7 +1019,7 @@ namespace WindowsDynamicIsland.UI
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            string[] tabNames = { "Главная", "Буфер", "Полка", "Заметки", "Погода", "Настройки" };
+            string[] tabNames = { "Главная", "Буфер", "Полка", "Заметки", "Погода", "Настройки", "Таймер" };
             string[] tabIcons =
             {
                 VectorIcons.Home,
@@ -1059,15 +1027,15 @@ namespace WindowsDynamicIsland.UI
                 VectorIcons.Shelf,
                 VectorIcons.Notes,
                 VectorIcons.Weather,
-                VectorIcons.Settings
+                VectorIcons.Settings,
+                VectorIcons.Clock
             };
 
             _navTabButtons = new System.Windows.Controls.Button[tabNames.Length];
-            for (int i = 0; i < tabNames.Length; i++)
+            foreach (int tabIdx in new[] { 0, 1, 2, 3, 6, 4, 5 })
             {
-                int tabIdx = i;
-                var btn = CreateStatefulNavTabButton(tabIdx, tabNames[i], tabIcons[i]);
-                _navTabButtons[i] = btn;
+                var btn = CreateStatefulNavTabButton(tabIdx, tabNames[tabIdx], tabIcons[tabIdx]);
+                _navTabButtons[tabIdx] = btn;
                 navStack.Children.Add(btn);
             }
 
@@ -1094,7 +1062,7 @@ namespace WindowsDynamicIsland.UI
             _pinOpenBtn = new Border
             {
                 CornerRadius = new CornerRadius(7),
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 Padding = new Thickness(0),
                 Margin = new Thickness(0, 0, 4, 0),
                 Cursor = Cursors.Hand,
@@ -1123,7 +1091,7 @@ namespace WindowsDynamicIsland.UI
             _closeExpandedBtn = new Border
             {
                 CornerRadius = new CornerRadius(7),
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 Padding = new Thickness(0),
                 Cursor = Cursors.Hand,
                 SnapsToDevicePixels = true,
@@ -1177,13 +1145,13 @@ namespace WindowsDynamicIsland.UI
         private System.Windows.Controls.Button CreateStatefulNavTabButton(int tabIndex, string label, string geometry)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal };
-            row.Children.Add(VectorIcons.Create(geometry, _palette.SecondaryText, 12));
+            row.Children.Add(VectorIcons.Create(geometry, _palette.SecondaryText, 10));
             row.Children.Add(new TextBlock
             {
                 Text = label,
                 FontFamily = ThemeTokens.UiFont,
-                FontSize = 11.5,
-                Margin = new Thickness(4, 0, 0, 0),
+                FontSize = 11,
+                Margin = new Thickness(3, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center
             });
             var button = new System.Windows.Controls.Button
@@ -1191,7 +1159,7 @@ namespace WindowsDynamicIsland.UI
                 Content = row,
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
-                Padding = new Thickness(7, 4, 7, 4)
+                Padding = new Thickness(5, 5, 5, 5)
             };
             button.SetResourceReference(StyleProperty, "IslandPlayerButton");
             button.Click += (sender, args) => SwitchTab(tabIndex);
@@ -1234,7 +1202,7 @@ namespace WindowsDynamicIsland.UI
         public void SwitchTab(int index)
         {
             bool tabChanged = _activeTabIndex != index;
-            _activeTabIndex = Math.Max(0, Math.Min(5, index));
+            _activeTabIndex = Math.Max(0, Math.Min(_navTabButtons.Length - 1, index));
             _lastInteractionUtc = DateTime.UtcNow;
 
             for (int i = 0; i < _navTabButtons.Length; i++)
@@ -1253,12 +1221,7 @@ namespace WindowsDynamicIsland.UI
             targetView.Opacity = 1.0;
             _tabViewportHost.Children.Add(targetView);
 
-            if (!SystemParameters.ClientAreaAnimation) return;
-            var fadeIn = new DoubleAnimation(0.35, 1.0, TimeSpan.FromMilliseconds(160))
-            {
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            targetView.BeginAnimation(OpacityProperty, fadeIn);
+            ThemeTokens.Reveal((FrameworkElement)targetView);
         }
 
         private void SwitchSettingsCategory(int catIndex)
@@ -1289,7 +1252,12 @@ namespace WindowsDynamicIsland.UI
                             SwitchTab,
                             () => _hwnd,
                             SwitchSettingsCategory,
-                            ApplyAllSettingsToWindow);
+                            ApplyAllSettingsToWindow,
+                            () =>
+                            {
+                                SwitchTab(3);
+                                _notesClockView?.CreateNewNoteAndOpenEditor();
+                            });
                     }
                     return _homeView;
                 case 1:
@@ -1316,6 +1284,10 @@ namespace WindowsDynamicIsland.UI
                         _weatherView = new WeatherView(_settings, _weather);
                     }
                     return _weatherView;
+                case 6:
+                    if (_clockView == null)
+                        _clockView = new NotesClockView(_settings, _notes, _timers, clockOnly: true);
+                    return _clockView;
                 default:
                     if (_settingsView == null)
                     {
@@ -1714,15 +1686,10 @@ namespace WindowsDynamicIsland.UI
             }
 
             Geometry fillGeom = BuildLiquidDropGeometry(clampedW, clampedH, clampedR, ear, fusedTop, true);
-            Geometry contourGeom = BuildLiquidDropGeometry(clampedW, clampedH, clampedR, ear, fusedTop, false);
 
             if (_liquidFillPath != null)
             {
                 _liquidFillPath.Data = fillGeom;
-            }
-            if (_liquidContourPath != null)
-            {
-                _liquidContourPath.Data = contourGeom;
             }
 
             // Frame-locked Apple Dynamic Island inner content morph (Scale + TranslateY + Cross-fade)
@@ -2186,14 +2153,7 @@ namespace WindowsDynamicIsland.UI
                     dc.Pop();
 
                     // 4. Continuous 1px contour line following the exact curved outer silhouette of the liquid droplet
-                    Geometry contourGeom = BuildLiquidDropGeometry(capW, capH, cornerR, ear, fusedTop, false, originX, padTop);
-                    var contourPen = new System.Windows.Media.Pen(_palette.SubtleBorder, 1.0)
-                    {
-                        StartLineCap = PenLineCap.Round,
-                        EndLineCap = PenLineCap.Round,
-                        LineJoin = PenLineJoin.Round
-                    };
-                    dc.DrawGeometry(null, contourPen, contourGeom);
+
                 }
                 rtb.Render(dv);
 
@@ -2349,10 +2309,6 @@ namespace WindowsDynamicIsland.UI
             var surfaceBrush = usePanelBg ? _palette.PanelBackground : _palette.CapsuleBackground;
 
             UpdateCapsuleSurfaceBrush(surfaceBrush);
-            if (_liquidContourPath != null)
-            {
-                _liquidContourPath.Stroke = _palette.SubtleBorder;
-            }
             if (_shadowPath != null)
                 _shadowPath.Visibility = _palette.IsGlass ? Visibility.Collapsed : Visibility.Visible;
             if (_shadowEffect != null)
@@ -2360,11 +2316,6 @@ namespace WindowsDynamicIsland.UI
                 _shadowEffect.Color = _palette.ShadowColor;
                 _shadowEffect.Opacity = _palette.ShadowOpacity;
                 _shadowEffect.BlurRadius = _palette.IsLight ? 20 : 24;
-            }
-            if (_specularTopLine != null)
-            {
-                _specularTopLine.Background = _palette.SpecularTopRim;
-                _specularTopLine.Visibility = fusedTop ? Visibility.Collapsed : Visibility.Visible;
             }
 
             // Collapsed layer colors
@@ -2492,6 +2443,7 @@ namespace WindowsDynamicIsland.UI
                 _clipboardView?.RebuildTheme();
                 _shelfView?.RebuildTheme();
                 _notesClockView?.RebuildTheme();
+                _clockView?.RebuildTheme();
                 _weatherView?.RebuildTheme();
                 _settingsView?.RebuildTheme();
                 SwitchTab(_activeTabIndex);
@@ -2711,7 +2663,8 @@ namespace WindowsDynamicIsland.UI
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Буфер обмена", null, (s, e) => { SwitchTab(1); SetExpandedState(true); });
             menu.Items.Add("Файловая полка", null, (s, e) => { SwitchTab(2); SetExpandedState(true); });
-            menu.Items.Add("Заметки и Часы", null, (s, e) => { SwitchTab(3); SetExpandedState(true); });
+            menu.Items.Add("Таймер", null, (s, e) => { SwitchTab(6); SetExpandedState(true); });
+            menu.Items.Add("Заметки", null, (s, e) => { SwitchTab(3); SetExpandedState(true); });
             menu.Items.Add("Погода", null, (s, e) => { SwitchTab(4); SetExpandedState(true); });
             menu.Items.Add("Настройки", null, (s, e) => { SwitchTab(5); SetExpandedState(true); });
             menu.Items.Add(new ToolStripSeparator());

@@ -101,7 +101,7 @@ The Glass theme adds a translucent graphite surface with a soft highlight around
 
 ### App Notifications
 
-When Windows grants notification access, the island shows new messages with their sender and preview. Telegram notifications with an explicit @username can open the chat directly. For other notifications the action opens the Windows Notification Center, where the original notification can open its conversation. The portable build may be denied notification access by Windows.
+When Windows grants notification access, the island shows new messages with their sender and preview. Telegram notifications with an explicit @username can open the chat directly. For other notifications the action opens the Windows Notification Center, where the original notification can open its conversation. On Windows 11, build the MSIX with installer/build-msix.ps1, then install the test package using Add-AppxPackage -Path .\\dist\\WindowsDynamicIsland.msix -AllowUnsigned in an administrator PowerShell. Launch from Start, open the Behaviour settings, and choose Connect notifications to grant access. Telegram, WhatsApp, Signal, Discord and other clients must send Windows notifications.
 
 ## Default Hotkeys
 

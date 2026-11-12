@@ -55,7 +55,8 @@ namespace WindowsDynamicIsland.UI
 
             CornerRadius = new CornerRadius(11);
             Padding = new Thickness(0);
-            BorderThickness = new Thickness(1);
+            Width = 52;
+            BorderThickness = new Thickness(0);
             VerticalAlignment = VerticalAlignment.Center;
             Cursor = Cursors.Hand;
             SnapsToDevicePixels = true;
@@ -67,7 +68,7 @@ namespace WindowsDynamicIsland.UI
                 FontFamily = ThemeTokens.MonoFont,
                 FontSize = 11.5,
                 FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(7, 2, 7, 2),
+                Margin = new Thickness(2, 2, 2, 2),
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 TextAlignment = TextAlignment.Center

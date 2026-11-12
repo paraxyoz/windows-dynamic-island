@@ -120,26 +120,38 @@ namespace WindowsDynamicIsland.UI
 
     <Style x:Key=""IslandPlayerButton"" TargetType=""{x:Type Button}"">
         <Setter Property=""Cursor"" Value=""Hand""/>
-        <Setter Property=""BorderThickness"" Value=""1""/>
+        <Setter Property=""BorderThickness"" Value=""0""/>
+        <Setter Property=""HorizontalContentAlignment"" Value=""Center""/>
         <Setter Property=""Template"">
             <Setter.Value>
                 <ControlTemplate TargetType=""{x:Type Button}"">
-                    <Border x:Name=""Surface"" CornerRadius=""8""
-                            Background=""{TemplateBinding Background}""
-                            BorderBrush=""{TemplateBinding BorderBrush}""
-                            BorderThickness=""{TemplateBinding BorderThickness}""
-                            Padding=""{TemplateBinding Padding}"">
-                        <ContentPresenter HorizontalAlignment=""Center"" VerticalAlignment=""Center""/>
-                    </Border>
+                    <Grid x:Name=""Surface"" Background=""Transparent"">
+                        <Border CornerRadius=""9"" Background=""{TemplateBinding Background}""/>
+                        <Border x:Name=""Glow"" CornerRadius=""9"" Background=""White"" Opacity=""0""/>
+                        <Border Padding=""{TemplateBinding Padding}"">
+                            <ContentPresenter HorizontalAlignment=""{TemplateBinding HorizontalContentAlignment}"" VerticalAlignment=""Center""/>
+                        </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property=""IsMouseOver"" Value=""True"">
-                            <Setter TargetName=""Surface"" Property=""Opacity"" Value=""0.87""/>
+                            <Trigger.EnterActions>
+                                <BeginStoryboard><Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName=""Glow"" Storyboard.TargetProperty=""Opacity""
+                                                     To=""0.085"" Duration=""0:0:0.15""/>
+                                </Storyboard></BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard><Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName=""Glow"" Storyboard.TargetProperty=""Opacity""
+                                                     To=""0"" Duration=""0:0:0.18""/>
+                                </Storyboard></BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                         <Trigger Property=""IsPressed"" Value=""True"">
-                            <Setter TargetName=""Surface"" Property=""Opacity"" Value=""0.7""/>
+                            <Setter TargetName=""Surface"" Property=""Opacity"" Value=""0.77""/>
                         </Trigger>
                         <Trigger Property=""IsEnabled"" Value=""False"">
-                            <Setter TargetName=""Surface"" Property=""Opacity"" Value=""0.55""/>
+                            <Setter TargetName=""Surface"" Property=""Opacity"" Value=""0.48""/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
