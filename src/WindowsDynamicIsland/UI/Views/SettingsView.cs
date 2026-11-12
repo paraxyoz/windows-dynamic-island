@@ -17,15 +17,17 @@ namespace WindowsDynamicIsland.UI.Views
     public sealed class SettingsView : UserControl
     {
         private readonly SettingsManager _settings;
+        private readonly SystemIntegrationService _system;
         private readonly Action _onSettingsApplied;
         private ThemePalette _palette;
         private int _activeCategory; // 0 = Внешний вид, 1 = Поведение, 2 = Кастомизация и приватность
         private Grid _categoryHost;
         private Border[] _categoryButtons;
 
-        public SettingsView(SettingsManager settings, Action onSettingsApplied)
+        public SettingsView(SettingsManager settings, SystemIntegrationService system, Action onSettingsApplied)
         {
             _settings = settings;
+            _system = system;
             _onSettingsApplied = onSettingsApplied;
             RebuildTheme();
         }
@@ -301,6 +303,38 @@ namespace WindowsDynamicIsland.UI.Views
             rightStack.Children.Add(CreateSectionTitle("Интеграция с Windows 11"));
             rightStack.Children.Add(CreateToggleRow("Запускать вместе с Windows", s.AutoStartWithWindows, v => { s.AutoStartWithWindows = v; SaveQuiet(); }));
             rightStack.Children.Add(CreateToggleRow("Отображать системные уведомления", s.ShowSystemNotifications, v => { s.ShowSystemNotifications = v; SaveQuiet(); }));
+            var notificationSettings = new System.Windows.Controls.Button
+            {
+                Content = "Доступ к уведомлениям Windows",
+                Foreground = _palette.PrimaryText,
+                Background = _palette.RaisedBackground,
+                BorderBrush = _palette.HairlineBorder,
+                Padding = new Thickness(9, 5, 9, 5),
+                Margin = new Thickness(0, 4, 0, 8),
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            notificationSettings.SetResourceReference(StyleProperty, "IslandPlayerButton");
+            notificationSettings.Click += (sender, args) =>
+            {
+                try
+                {
+                    using (System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:privacy-notifications")
+                        { UseShellExecute = true })) { }
+                }
+                catch (Exception ex) { StorageService.LogError("OpenNotificationSettings", ex); }
+            };
+            rightStack.Children.Add(notificationSettings);
+            if (s.ShowSystemNotifications && !_system.NotificationsListenerActive)
+            {
+                rightStack.Children.Add(new TextBlock
+                {
+                    Text = "Windows не предоставила этой сборке доступ к уведомлениям.",
+                    Foreground = _palette.SecondaryText,
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 0, 0, 8)
+                });
+            }
             rightStack.Children.Add(CreateToggleRow("Работать поверх полноэкранных окон", s.AllowOverFullscreenApps, v => { s.AllowOverFullscreenApps = v; SaveQuiet(); }));
             rightStack.Children.Add(CreateToggleRow("Плавно прятать в полноэкранных играх", s.HideInFullscreenApps, v => { s.HideInFullscreenApps = v; SaveQuiet(); }));
 

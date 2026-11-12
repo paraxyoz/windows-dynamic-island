@@ -31,6 +31,7 @@ namespace WindowsDynamicIsland.Services
         private DateTimeOffset _seekTime;
         private DateTimeOffset _previousTimelineUpdate;
         private TimeSpan _seekTarget;
+        private GlobalSystemMediaTransportControlsSessionPlaybackInfo _playback;
 
         public string Title { get; private set; } = "Нет активного медиа";
         public string Artist { get; private set; } = "Запустите плеер или браузер";
@@ -50,7 +51,7 @@ namespace WindowsDynamicIsland.Services
         public MediaSessionService(EventQueueManager eventQueue)
         {
             _eventQueue = eventQueue;
-            _timelineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+            _timelineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(65) };
             _timelineTimer.Tick += (s, e) => UpdateTimeline();
         }
 
@@ -90,6 +91,7 @@ namespace WindowsDynamicIsland.Services
                 if (next == _session) return;
                 DetachSession();
                 _session = next;
+                _playback = null;
                 _timelineTimer.Stop();
                 _metadataRequest++;
                 TrackVersion++;
@@ -153,7 +155,7 @@ namespace WindowsDynamicIsland.Services
             if (session == null || session != _session) return;
             try
             {
-                var playback = session.GetPlaybackInfo();
+                var playback = _playback = session.GetPlaybackInfo();
                 bool wasPlaying = IsPlaying;
                 IsPlaying = playback?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
                 UpdateTimeline();
@@ -231,7 +233,7 @@ namespace WindowsDynamicIsland.Services
             try
             {
                 var timeline = session.GetTimelineProperties();
-                var playback = session.GetPlaybackInfo();
+                var playback = _playback;
                 _start = timeline?.StartTime ?? TimeSpan.Zero;
                 Duration = (timeline?.EndTime ?? _start) - _start;
                 if (Duration < TimeSpan.Zero) Duration = TimeSpan.Zero;

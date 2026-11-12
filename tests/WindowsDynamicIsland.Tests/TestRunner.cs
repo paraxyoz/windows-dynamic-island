@@ -45,6 +45,9 @@ namespace WindowsDynamicIsland.Tests
 
             RunTest("10. LyricsService: Разбор LRC, пустые строки и синхронизация после перемотки", TestSyncedLyrics);
 
+            RunTest("11. Lyricsfile: реальные временные метки слов и переход на LRC", TestWordLyrics);
+            RunTest("12. Telegram: адрес чата только из корректного имени пользователя", TestTelegramChatUri);
+
             Console.WriteLine($"=== Итог тестов: Пройдено {_passed}, Ошибок {_failed} ===");
             return _failed == 0 ? 0 : 1;
         }
@@ -83,6 +86,43 @@ namespace WindowsDynamicIsland.Tests
             Assert(lyrics.ActiveLine(TimeSpan.FromSeconds(21)) == 3, "Перемотка вперёд выбирает соответствующую строку");
             Assert(lyrics.ActiveLine(TimeSpan.FromSeconds(3)) == 0, "Перемотка назад возвращает первую строку");
             Assert(LyricsService.ParseLrc(null).Count == 0, "Отсутствие LRC допускается");
+        }
+
+        private static void TestWordLyrics()
+        {
+            const string yaml = @"version: '1.0'
+lines:
+  - text: 'Sing it'
+    start_ms: 1000
+    end_ms: 2000
+    words:
+      - text: 'Sing '
+        start_ms: 1000
+        end_ms: 1500
+      - text: it
+        start_ms: 1500
+        end_ms: 2000
+  - text: Wait
+    start_ms: 2500
+    end_ms: 2800
+plain: |
+  Sing it
+  Wait";
+            var lines = LyricsService.ParseWordLyrics(yaml);
+            Assert(lines.Count == 2 && lines[0].Words.Count == 2, "Должны сохраниться обе строки и оба слова");
+            Assert(lines[0].Words[0].Text == "Sing ", "Пробелы в сегментах должны сохраняться");
+            Assert(lines[0].Words[1].Start.TotalMilliseconds == 1500, "Подсветка слова должна использовать исходную метку");
+            Assert(lines[1].Words.Count == 0, "Строка без слов остаётся синхронизированной по строке");
+            Assert(LyricsService.ParseWordLyrics("lines:\n- text: Line\n  start_ms: 1000").Count == 0,
+                "Данные без меток слов обрабатываются через LRC");
+        }
+
+        private static void TestTelegramChatUri()
+        {
+            Assert(SystemIntegrationService.TelegramChatUri("@example_user")?.OriginalString == "tg://resolve?domain=example_user",
+                "Корректный username должен открывать чат Telegram");
+            Assert(SystemIntegrationService.TelegramChatUri("Display Name") == null, "Из имени нельзя угадывать чат");
+            Assert(SystemIntegrationService.TelegramChatUri("@example&start=123") == null, "Параметры из уведомления недопустимы");
         }
 
         private static void TestStorageCrashRecovery()

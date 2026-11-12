@@ -3,6 +3,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using WindowsDynamicIsland.Services;
 
@@ -17,6 +20,12 @@ namespace WindowsDynamicIsland.UI.Views
         private CancellationTokenSource _request;
         private int _trackVersion = -1;
         private int _active = -1;
+        private int _activeWord = -2;
+        private static readonly DependencyProperty FollowOffsetProperty = DependencyProperty.Register(
+            "FollowOffset", typeof(double), typeof(TrackLyricsView), new PropertyMetadata(0.0, (target, change) =>
+            {
+                ((TrackLyricsView)target).ScrollToVerticalOffset((double)change.NewValue);
+            }));
 
         public TrackLyricsView(MediaSessionService media, ThemePalette palette)
         {
@@ -25,6 +34,8 @@ namespace WindowsDynamicIsland.UI.Views
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             Content = _lines;
+            PreviewMouseWheel += (s, e) => BeginAnimation(FollowOffsetProperty, null);
+            PanningMode = PanningMode.VerticalOnly;
             Visibility = Visibility.Collapsed;
             IsVisibleChanged += (s, e) =>
             {
@@ -43,8 +54,9 @@ namespace WindowsDynamicIsland.UI.Views
                 _trackVersion = _media.TrackVersion;
                 _lyrics = null;
                 _active = -1;
+                BeginAnimation(FollowOffsetProperty, null);
                 ScrollToTop();
-                if (string.IsNullOrWhiteSpace(_media.TrackArtist))
+                if (!LyricsService.CanLookup(_media.Title, _media.TrackArtist))
                     ShowStatus(_media.HasActiveSession ? "Для поиска текста нужен исполнитель." : "Включите трек, чтобы открыть текст.");
                 else
                     _ = LoadAsync();
@@ -107,6 +119,7 @@ namespace WindowsDynamicIsland.UI.Views
         private void ShowStatus(string message)
         {
             _lines.Children.Clear();
+            _lines.Margin = new Thickness(0);
             _lines.Children.Add(CreateText(message, 13));
         }
 
@@ -128,13 +141,25 @@ namespace WindowsDynamicIsland.UI.Views
             }
 
             _lines.Children.Clear();
+            _lines.Margin = new Thickness(0, 10, 0, 42);
             foreach (var line in _lyrics.Lines)
             {
-                var text = CreateText(line.Text, 18);
-                text.Margin = new Thickness(0, 0, 10, 12);
+                var text = CreateText(line.Words.Count == 0 ? line.Text : string.Empty, 20);
+                text.Margin = new Thickness(0, 0, 12, 13);
                 text.FontWeight = FontWeights.SemiBold;
-                text.Foreground = _palette.MutedText;
-                if (line.Text.Length == 0) text.Visibility = Visibility.Collapsed;
+                text.Foreground = _palette.PrimaryText;
+                text.Opacity = 0.52;
+                foreach (var word in line.Words)
+                    text.Inlines.Add(new Run(word.Text));
+
+                if (line.Text.Length == 0)
+                    text.Visibility = Visibility.Collapsed;
+                else
+                    text.MouseLeftButtonUp += async (s, e) =>
+                    {
+                        if (_media.CanSeek && _trackVersion == _media.TrackVersion)
+                            await _media.SeekAsync(line.Time, _trackVersion);
+                    };
                 _lines.Children.Add(text);
             }
             UpdateActiveLine();
@@ -155,25 +180,87 @@ namespace WindowsDynamicIsland.UI.Views
         private void UpdateActiveLine()
         {
             if (_lyrics == null || _lyrics.Lines.Count == 0) return;
-            int active = _lyrics.ActiveLine(_media.Position);
-            if (active == _active) return;
-            if (_active >= 0) ((TextBlock)_lines.Children[_active]).Foreground = _palette.MutedText;
-            _active = active;
-            if (active < 0)
+            var position = _media.Position;
+            int active = _lyrics.ActiveLine(position);
+            if (active != _active)
             {
-                ScrollToTop();
+                if (_active >= 0)
+                {
+                    var previous = (TextBlock)_lines.Children[_active];
+                    FadeLine(previous, 0.52);
+                    foreach (var run in previous.Inlines) run.ClearValue(TextElement.ForegroundProperty);
+                }
+                _active = active;
+                _activeWord = -2;
+                if (active < 0) { Follow(0); return; }
+
+                var line = (TextBlock)_lines.Children[active];
+                FadeLine(line, 1);
+                if (line.Visibility == Visibility.Visible)
+                {
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        if (!IsVisible || _active != active || !_lines.Children.Contains(line)) return;
+                        double top = line.TranslatePoint(new Point(), _lines).Y + _lines.Margin.Top;
+                        Follow(top - Math.Max(0, (ViewportHeight - line.ActualHeight) * 0.30));
+                    }, DispatcherPriority.Loaded);
+                }
+            }
+            if (active < 0) return;
+            var words = _lyrics.Lines[active].Words;
+            if (words.Count == 0) return;
+            int current = 0;
+            while (current < words.Count && position >= words[current].End) current++;
+            int highlighted = current < words.Count && position >= words[current].Start ? current : -1;
+            int wordState = current * 2 + (highlighted >= 0 ? 1 : 0);
+            if (_activeWord == wordState) return;
+            _activeWord = wordState;
+
+            int index = 0;
+            foreach (var run in ((TextBlock)_lines.Children[active]).Inlines)
+            {
+                if (index == highlighted && SystemParameters.ClientAreaAnimation &&
+                    _palette.Accent is SolidColorBrush accent && _palette.MutedText is SolidColorBrush muted)
+                {
+                    var glow = new SolidColorBrush(accent.Color);
+                    run.Foreground = glow;
+                    glow.BeginAnimation(SolidColorBrush.ColorProperty,
+                        new ColorAnimation(muted.Color, accent.Color, TimeSpan.FromMilliseconds(105))
+                        { FillBehavior = FillBehavior.Stop });
+                }
+                else
+                {
+                    run.Foreground = index == highlighted ? _palette.Accent :
+                        index < current ? _palette.PrimaryText : _palette.MutedText;
+                }
+                index++;
+            }
+        }
+
+        private void Follow(double offset)
+        {
+            offset = Math.Max(0, Math.Min(ScrollableHeight, offset));
+            if (!SystemParameters.ClientAreaAnimation)
+            {
+                ScrollToVerticalOffset(offset);
                 return;
             }
-
-            var line = (TextBlock)_lines.Children[active];
-            line.Foreground = _palette.PrimaryText;
-            if (line.Visibility == Visibility.Collapsed) return;
-            Dispatcher.InvokeAsync(() =>
+            BeginAnimation(FollowOffsetProperty, new DoubleAnimation(VerticalOffset, offset, TimeSpan.FromMilliseconds(380))
             {
-                if (!IsVisible || _active != active || !_lines.Children.Contains(line)) return;
-                double top = line.TranslatePoint(new Point(), _lines).Y;
-                ScrollToVerticalOffset(top - Math.Max(0, (ViewportHeight - line.ActualHeight) * 0.35));
-            }, DispatcherPriority.Loaded);
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+        }
+
+        private static void FadeLine(TextBlock line, double opacity)
+        {
+            double from = line.Opacity;
+            line.BeginAnimation(OpacityProperty, null);
+            line.Opacity = opacity;
+            if (SystemParameters.ClientAreaAnimation)
+                line.BeginAnimation(OpacityProperty, new DoubleAnimation(from, opacity, TimeSpan.FromMilliseconds(220))
+                {
+                    FillBehavior = FillBehavior.Stop
+                });
         }
     }
 }

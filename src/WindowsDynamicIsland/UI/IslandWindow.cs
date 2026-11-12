@@ -74,6 +74,8 @@ namespace WindowsDynamicIsland.UI
         private bool _isPinnedOpen;
         private bool _isIdleRetracted;
         private bool _isFullscreenRetracted;
+        private IntPtr _fullscreenWindow;
+        private IntPtr _fullscreenOverride;
         private DateTime _lastInteractionUtc = DateTime.UtcNow;
         private DateTime _lastWakeFromIdleUtc = DateTime.MinValue;
         private int _activeTabIndex;
@@ -85,7 +87,6 @@ namespace WindowsDynamicIsland.UI
         private TranslateTransform _dropTranslateTransform;
         private System.Windows.Shapes.Path _shadowPath;
         private System.Windows.Shapes.Path _liquidFillPath;
-        private System.Windows.Shapes.Path _liquidInnerGlassRimPath;
         private System.Windows.Shapes.Path _liquidContourPath;
         private double _currentCornerRadius;
         private DropShadowEffect _shadowEffect;
@@ -136,10 +137,12 @@ namespace WindowsDynamicIsland.UI
         // Expanded State Elements
         private SmileyBadgeControl _expandedSmiley;
         private TextBlock _expandedClockText;
-        private Border[] _navTabButtons;
+        private System.Windows.Controls.Button[] _navTabButtons;
         private Border _pinOpenBtn;
         private Border _closeExpandedBtn;
         private Grid _tabViewportHost;
+        private Border _navTray;
+        private Border _expandedNotice;
 
         // Lazy-loaded Views
         private HomeView _homeView;
@@ -337,27 +340,14 @@ namespace WindowsDynamicIsland.UI
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top,
                 IsHitTestVisible = false,
-                SnapsToDevicePixels = true
-            };
-
-            // A clipped inner highlight follows the same animated contour.
-            _liquidInnerGlassRimPath = new System.Windows.Shapes.Path
-            {
-                Stroke = _palette.HairlineBorder,
-                StrokeThickness = 1.8,
-                Fill = null,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
-                IsHitTestVisible = false,
-                Opacity = 0.85,
-                Visibility = _palette.IsGlass ? Visibility.Visible : Visibility.Collapsed
+                SnapsToDevicePixels = false
             };
 
             // 5. _liquidContourPath renders the continuous 1px contour line along the exact outer droplet silhouette
             _liquidContourPath = new System.Windows.Shapes.Path
             {
                 Stroke = _palette.SubtleBorder,
-                StrokeThickness = 1.0,
+                StrokeThickness = 0.85,
                 Fill = null,
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap = PenLineCap.Round,
@@ -431,7 +421,6 @@ namespace WindowsDynamicIsland.UI
             };
             capsuleAndEarsGrid.Children.Add(_shadowPath);
             capsuleAndEarsGrid.Children.Add(_liquidFillPath);
-            capsuleAndEarsGrid.Children.Add(_liquidInnerGlassRimPath);
             capsuleAndEarsGrid.Children.Add(_capsuleBorder);
             capsuleAndEarsGrid.Children.Add(_liquidContourPath);
 
@@ -1012,7 +1001,7 @@ namespace WindowsDynamicIsland.UI
             {
                 Width = BaseExpandedWidth - 26,
                 Height = BaseExpandedHeight - 22,
-                Margin = new Thickness(13, 10, 13, 12),
+                Margin = new Thickness(13, 11, 13, 11),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Top,
                 RenderTransformOrigin = new Point(0.5, 0.0),
@@ -1073,7 +1062,7 @@ namespace WindowsDynamicIsland.UI
                 VectorIcons.Settings
             };
 
-            _navTabButtons = new Border[tabNames.Length];
+            _navTabButtons = new System.Windows.Controls.Button[tabNames.Length];
             for (int i = 0; i < tabNames.Length; i++)
             {
                 int tabIdx = i;
@@ -1082,8 +1071,17 @@ namespace WindowsDynamicIsland.UI
                 navStack.Children.Add(btn);
             }
 
-            Grid.SetColumn(navStack, 1);
-            headerGrid.Children.Add(navStack);
+            _navTray = new Border
+            {
+                Child = navStack,
+                Background = _palette.CardBackground,
+                CornerRadius = new CornerRadius(11),
+                Padding = new Thickness(3),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(_navTray, 1);
+            headerGrid.Children.Add(_navTray);
 
             // Right Header Controls: Pin Open + Collapse (Dynamically bound to current _palette)
             var rightControls = new StackPanel
@@ -1148,6 +1146,7 @@ namespace WindowsDynamicIsland.UI
             };
             rightControls.Children.Add(_closeExpandedBtn);
 
+            if (_navTray != null) _navTray.Background = _palette.CardBackground;
             UpdatePinButtonVisual();
             UpdateCloseButtonVisual();
 
@@ -1160,121 +1159,56 @@ namespace WindowsDynamicIsland.UI
             _tabViewportHost = new Grid();
             Grid.SetRow(_tabViewportHost, 2);
             grid.Children.Add(_tabViewportHost);
+            _expandedNotice = new Border
+            {
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(11, 7, 7, 7),
+                Margin = new Thickness(8, 0, 8, 8),
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Visibility = Visibility.Collapsed
+            };
+            Grid.SetRow(_expandedNotice, 2);
+            grid.Children.Add(_expandedNotice);
 
             SwitchTab(0);
             return grid;
         }
 
-        private Border CreateStatefulNavTabButton(int tabIdx, string tabName, string iconGeometry)
+        private System.Windows.Controls.Button CreateStatefulNavTabButton(int tabIndex, string label, string geometry)
         {
-            var tabRow = new StackPanel
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(VectorIcons.Create(geometry, _palette.SecondaryText, 12));
+            row.Children.Add(new TextBlock
             {
-                Orientation = Orientation.Horizontal,
-                Margin = new Thickness(8, 4, 8, 4)
-            };
-            var iconPath = VectorIcons.Create(iconGeometry, _palette.SecondaryText, 12.5);
-            var labelTb = new TextBlock
-            {
-                Text = tabName,
+                Text = label,
                 FontFamily = ThemeTokens.UiFont,
                 FontSize = 11.5,
-                FontWeight = FontWeights.Medium,
-                Foreground = _palette.SecondaryText,
-                Margin = new Thickness(4.5, 0, 0, 0),
+                Margin = new Thickness(4, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center
-            };
-            tabRow.Children.Add(iconPath);
-            tabRow.Children.Add(labelTb);
-
-            var glassOverlay = ThemeTokens.BuildIos26GlassOverlay(8, tabIdx == _activeTabIndex);
-            glassOverlay.Visibility = _palette.IsGlass ? Visibility.Visible : Visibility.Collapsed;
-
-            var innerGrid = new Grid();
-            innerGrid.Children.Add(glassOverlay);
-            innerGrid.Children.Add(tabRow);
-
-            var btn = new Border
+            });
+            var button = new System.Windows.Controls.Button
             {
-                CornerRadius = new CornerRadius(8),
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(0),
-                Margin = new Thickness(1.5, 0, 1.5, 0),
-                Cursor = Cursors.Hand,
-                SnapsToDevicePixels = true,
-                UseLayoutRounding = true,
-                Child = innerGrid
+                Content = row,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(7, 4, 7, 4)
             };
-
-            btn.MouseEnter += (s, e) =>
-            {
-                if (_activeTabIndex != tabIdx)
-                {
-                    btn.Background = _palette.HoverBackground;
-                    btn.BorderBrush = _palette.SubtleBorder;
-                    iconPath.Stroke = _palette.PrimaryText;
-                    labelTb.Foreground = _palette.PrimaryText;
-                }
-            };
-
-            btn.MouseLeave += (s, e) =>
-            {
-                ApplyNavTabButtonVisual(tabIdx);
-            };
-
-            btn.MouseLeftButtonDown += (s, e) =>
-            {
-                e.Handled = true;
-            };
-
-            btn.MouseLeftButtonUp += (s, e) =>
-            {
-                e.Handled = true;
-                SwitchTab(tabIdx);
-            };
-
-            return btn;
+            button.SetResourceReference(StyleProperty, "IslandPlayerButton");
+            button.Click += (sender, args) => SwitchTab(tabIndex);
+            return button;
         }
 
-        private void ApplyNavTabButtonVisual(int i)
+        private void ApplyNavTabButtonVisual(int index)
         {
-            if (_navTabButtons == null || i < 0 || i >= _navTabButtons.Length || _navTabButtons[i] == null)
-                return;
-
-            bool active = i == _activeTabIndex;
-            var btn = _navTabButtons[i];
-
-            btn.Background = active ? _palette.Accent : _palette.RaisedBackground;
-            btn.BorderBrush = active
-                ? (_palette.IsLight ? _palette.Accent : _palette.SubtleBorder)
-                : _palette.HairlineBorder;
-
-            StackPanel sp = btn.Child as StackPanel;
-            if (sp == null && btn.Child is Grid g && g.Children.Count == 2)
-            {
-                if (_palette.IsGlass)
-                {
-                    g.Children.RemoveAt(0);
-                    g.Children.Insert(0, ThemeTokens.BuildIos26GlassOverlay(8, active));
-                }
-                else
-                {
-                    g.Children[0].Visibility = Visibility.Collapsed;
-                }
-                sp = g.Children[1] as StackPanel;
-            }
-
-            if (sp != null && sp.Children.Count == 2)
-            {
-                if (sp.Children[0] is System.Windows.Shapes.Path iconPath)
-                {
-                    iconPath.Stroke = active ? _palette.OnAccentText : _palette.SecondaryText;
-                }
-                if (sp.Children[1] is TextBlock tb)
-                {
-                    tb.Foreground = active ? _palette.OnAccentText : _palette.SecondaryText;
-                    tb.FontWeight = active ? FontWeights.SemiBold : FontWeights.Medium;
-                }
-            }
+            if (_navTabButtons == null || index < 0 || index >= _navTabButtons.Length) return;
+            var button = _navTabButtons[index];
+            if (button == null) return;
+            bool active = index == _activeTabIndex;
+            button.Background = active ? _palette.Accent : Brushes.Transparent;
+            button.Foreground = active ? _palette.OnAccentText : _palette.SecondaryText;
+            var row = (StackPanel)button.Content;
+            ((System.Windows.Shapes.Path)row.Children[0]).Stroke = button.Foreground;
+            ((TextBlock)row.Children[1]).FontWeight = active ? FontWeights.SemiBold : FontWeights.Medium;
         }
 
         private void UpdatePinButtonVisual()
@@ -1314,11 +1248,13 @@ namespace WindowsDynamicIsland.UI
             }
 
             UIElement targetView = GetOrCreateTabView(_activeTabIndex);
+            if (_tabViewportHost.Children.Count == 1 && _tabViewportHost.Children[0] == targetView) return;
             _tabViewportHost.Children.Clear();
-            targetView.Opacity = 0.0;
+            targetView.Opacity = 1.0;
             _tabViewportHost.Children.Add(targetView);
 
-            var fadeIn = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(120))
+            if (!SystemParameters.ClientAreaAnimation) return;
+            var fadeIn = new DoubleAnimation(0.35, 1.0, TimeSpan.FromMilliseconds(160))
             {
                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
             };
@@ -1329,7 +1265,7 @@ namespace WindowsDynamicIsland.UI
         {
             if (_settingsView == null)
             {
-                _settingsView = new SettingsView(_settings, ApplyAllSettingsToWindow);
+                _settingsView = new SettingsView(_settings, _sys, ApplyAllSettingsToWindow);
             }
             _settingsView.SwitchToCategory(catIndex);
         }
@@ -1383,7 +1319,7 @@ namespace WindowsDynamicIsland.UI
                 default:
                     if (_settingsView == null)
                     {
-                        _settingsView = new SettingsView(_settings, ApplyAllSettingsToWindow);
+                        _settingsView = new SettingsView(_settings, _sys, ApplyAllSettingsToWindow);
                     }
                     return _settingsView;
             }
@@ -1463,15 +1399,20 @@ namespace WindowsDynamicIsland.UI
             _lastInteractionUtc = DateTime.UtcNow;
             WakeFromIdleIfNeeded(false);
 
+            if (expanded && _isFullscreenRetracted)
+            {
+                _fullscreenOverride = _fullscreenWindow;
+                SetFullscreenRetractedState(false);
+            }
+            else if (!expanded)
+            {
+                _fullscreenOverride = IntPtr.Zero;
+            }
+
             _isExpanded = expanded;
+            UpdateExpandedNotice(_eventQueue.CurrentEvent);
             _isQuickNoteOpen = false;
             TriggerSmileyReaction(expanded ? SmileyReactionType.Expand : SmileyReactionType.Collapse);
-
-            // Enable GPU BitmapCache on _expandedLayer during spring morphing for 120Hz+ zero-layout-stutter fluidity
-            if (_expandedLayer != null && _expandedLayer.CacheMode == null)
-            {
-                _expandedLayer.CacheMode = new BitmapCache { EnableClearType = false, RenderAtScale = 1.0 };
-            }
 
             if (_isExpanded)
             {
@@ -1673,50 +1614,59 @@ namespace WindowsDynamicIsland.UI
         {
             if (_isFullscreenRetracted == retracted) return;
             _isFullscreenRetracted = retracted;
+            _hoverExpandTimer.Stop();
+            _hoverCollapseTimer.Stop();
 
-            if (_isFullscreenRetracted)
+            if (retracted)
             {
-                _hoverExpandTimer.Stop();
-                if (_isExpanded && !_isPinnedOpen)
-                {
-                    _isExpanded = false;
-                    _expandedLayer.Visibility = Visibility.Collapsed;
-                    _collapsedLayer.Visibility = Visibility.Visible;
-                }
-                // Smoothly retract the entire liquid drop up above the top screen edge
-                double retractY = -(_capsuleBorder.ActualHeight + 22.0);
-                AnimateDropExtrusion(targetY: retractY, targetScaleX: 0.76, targetScaleY: 0.15, targetOpacity: 0.0, durationMs: 280);
+                // Keep the current silhouette intact throughout the dismissal.
+                AnimateDropExtrusion(-22, 1, 1, 0, 190);
+                return;
             }
-            else
+
+            _lastInteractionUtc = _lastWakeFromIdleUtc = DateTime.UtcNow;
+            _isIdleRetracted = false;
+            if (!_isExpanded && !_isQuickNoteOpen && _eventQueue.CurrentEvent == null)
             {
-                _lastInteractionUtc = DateTime.UtcNow;
-                _isIdleRetracted = false;
-                AnimateDropExtrusion(targetY: 0.0, targetScaleX: 1.0, targetScaleY: 1.0, targetOpacity: 1.0, durationMs: 300);
-                if (!_isExpanded && !_isQuickNoteOpen && _eventQueue.CurrentEvent == null)
-                {
-                    _collapsedLayer.BeginAnimation(OpacityProperty, new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(160)));
-                    _animEngine.AnimateTo(BaseCollapsedWidth, BaseCollapsedHeight, _settings.Current.CollapsedCornerRadius);
-                }
+                _collapsedLayer.BeginAnimation(OpacityProperty, null);
+                _collapsedLayer.Opacity = 1;
+                _collapsedLayer.Visibility = Visibility.Visible;
+                _animEngine.SnapTo(BaseCollapsedWidth, BaseCollapsedHeight, _settings.Current.CollapsedCornerRadius);
             }
+            if (!_isExpanded && !_isQuickNoteOpen)
+            {
+                if (_eventQueue.CurrentEvent != null) MorphToToast(_eventQueue.CurrentEvent);
+                else _toastLayer.Visibility = Visibility.Collapsed;
+            }
+            AnimateDropExtrusion(0, 1, 1, 1, 300);
         }
 
         private void AnimateDropExtrusion(double targetY, double targetScaleX, double targetScaleY, double targetOpacity, int durationMs)
         {
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            var dur = TimeSpan.FromMilliseconds(durationMs);
+            void Retarget(DependencyObject visual, DependencyProperty property, double target,
+                Action<DependencyProperty, AnimationTimeline> animate)
+            {
+                double current = (double)visual.GetValue(property);
+                animate(property, null);
+                visual.SetValue(property, target);
+                if (!SystemParameters.ClientAreaAnimation || Math.Abs(current - target) < 0.001) return;
+                animate(property, new DoubleAnimation(current, target, TimeSpan.FromMilliseconds(durationMs))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.Stop
+                });
+            }
 
-            _dropTranslateTransform?.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(targetY, dur) { EasingFunction = ease });
-            _dropScaleTransform?.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(targetScaleX, dur) { EasingFunction = ease });
-            _dropScaleTransform?.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(targetScaleY, dur) { EasingFunction = ease });
-            _dropMorphContainer?.BeginAnimation(OpacityProperty, new DoubleAnimation(targetOpacity, dur) { EasingFunction = ease });
+            Retarget(_dropTranslateTransform, TranslateTransform.YProperty, targetY, _dropTranslateTransform.BeginAnimation);
+            Retarget(_dropScaleTransform, ScaleTransform.ScaleXProperty, targetScaleX, _dropScaleTransform.BeginAnimation);
+            Retarget(_dropScaleTransform, ScaleTransform.ScaleYProperty, targetScaleY, _dropScaleTransform.BeginAnimation);
+            Retarget(_dropMorphContainer, OpacityProperty, targetOpacity, _dropMorphContainer.BeginAnimation);
         }
 
         private void OnAnimationSettled()
         {
             if (_expandedLayer != null)
             {
-                // Restore crisp ClearType vector rendering when settled
-                _expandedLayer.CacheMode = null;
                 if (!_isExpanded)
                 {
                     _expandedLayer.Visibility = Visibility.Collapsed;
@@ -1770,33 +1720,29 @@ namespace WindowsDynamicIsland.UI
             {
                 _liquidFillPath.Data = fillGeom;
             }
-            if (_liquidInnerGlassRimPath != null && _liquidInnerGlassRimPath.Visibility == Visibility.Visible)
-            {
-                _liquidInnerGlassRimPath.Data = contourGeom;
-                _liquidInnerGlassRimPath.Clip = fillGeom;
-            }
             if (_liquidContourPath != null)
             {
                 _liquidContourPath.Data = contourGeom;
             }
 
             // Frame-locked Apple Dynamic Island inner content morph (Scale + TranslateY + Cross-fade)
-            if (!_isQuickNoteOpen && _eventQueue.CurrentEvent == null && !_isIdleRetracted && _expandedLayer != null && _collapsedLayer != null)
+            if (!_isQuickNoteOpen && _toastLayer?.Visibility != Visibility.Visible && !_isIdleRetracted && _expandedLayer != null && _collapsedLayer != null)
             {
                 double expandProgress = Math.Max(0.0, Math.Min(1.0, (clampedW - BaseCollapsedWidth) / (BaseExpandedWidth - BaseCollapsedWidth)));
                 if (expandProgress > 0.005 || _isExpanded)
                 {
                     _expandedLayer.Visibility = Visibility.Visible;
-                    _expandedLayer.Opacity = Math.Max(0.0, Math.Min(1.0, (expandProgress - 0.05) / 0.78));
+                    double reveal = Math.Max(0, Math.Min(1, (expandProgress - 0.18) / 0.70));
+                    _expandedLayer.Opacity = reveal * reveal * (3 - 2 * reveal);
                     if (_expandedScaleTransform != null)
                     {
-                        double s = 0.88 + 0.12 * expandProgress;
+                        double s = 0.98 + 0.02 * expandProgress;
                         _expandedScaleTransform.ScaleX = s;
                         _expandedScaleTransform.ScaleY = s;
                     }
                     if (_expandedTranslateTransform != null)
                     {
-                        _expandedTranslateTransform.Y = -12.0 * (1.0 - expandProgress);
+                        _expandedTranslateTransform.Y = -8.0 * (1.0 - reveal);
                     }
                 }
                 else
@@ -1928,7 +1874,8 @@ namespace WindowsDynamicIsland.UI
 
         private void OnActiveEventChanged(IslandEvent ev)
         {
-            if (_isExpanded || _isQuickNoteOpen) return;
+            UpdateExpandedNotice(ev);
+            if (_isExpanded || _isQuickNoteOpen || _isFullscreenRetracted) return;
             if (ev != null)
             {
                 MorphToToast(ev);
@@ -1937,6 +1884,58 @@ namespace WindowsDynamicIsland.UI
             {
                 MorphToCollapsed();
             }
+        }
+
+        private void UpdateExpandedNotice(IslandEvent notification)
+        {
+            if (_expandedNotice == null) return;
+            if (!_isExpanded || notification?.EventType != IslandEventType.AppNotification || notification.PrimaryAction == null)
+            {
+                _expandedNotice.Visibility = Visibility.Collapsed;
+                _expandedNotice.Child = null;
+                return;
+            }
+            var action = new System.Windows.Controls.Button
+            {
+                Content = notification.PrimaryActionLabel,
+                Foreground = _palette.OnAccentText,
+                Background = _palette.Accent,
+                BorderBrush = _palette.Accent,
+                Padding = new Thickness(10, 5, 10, 5),
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            action.SetResourceReference(StyleProperty, "IslandPlayerButton");
+            action.Click += (sender, args) => notification.PrimaryAction();
+            var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            labels.Children.Add(new TextBlock
+            {
+                Text = notification.Title,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = _palette.PrimaryText,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            labels.Children.Add(new TextBlock
+            {
+                Text = notification.BadgeText + "  ·  " + notification.Subtitle,
+                Foreground = _palette.SecondaryText,
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            var row = new DockPanel();
+            DockPanel.SetDock(action, Dock.Right);
+            row.Children.Add(action);
+            row.Children.Add(labels);
+            _expandedNotice.Background = _palette.IsLight ? Brushes.White : ThemeTokens.MakeBrush(255, 39, 43, 52);
+            _expandedNotice.BorderThickness = new Thickness(1);
+            _expandedNotice.BorderBrush = _palette.HairlineBorder;
+            _expandedNotice.Child = row;
+            _expandedNotice.Visibility = Visibility.Visible;
+            if (SystemParameters.ClientAreaAnimation)
+                _expandedNotice.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180))
+                {
+                    FillBehavior = FillBehavior.Stop
+                });
         }
 
         private void OnMediaStateChanged()
@@ -2188,13 +2187,6 @@ namespace WindowsDynamicIsland.UI
 
                     // 4. Continuous 1px contour line following the exact curved outer silhouette of the liquid droplet
                     Geometry contourGeom = BuildLiquidDropGeometry(capW, capH, cornerR, ear, fusedTop, false, originX, padTop);
-                    if (_palette.IsGlass)
-                    {
-                        dc.PushClip(fillGeom);
-                        var innerRimPen = new System.Windows.Media.Pen(_palette.HairlineBorder, 1.8);
-                        dc.DrawGeometry(null, innerRimPen, contourGeom);
-                        dc.Pop();
-                    }
                     var contourPen = new System.Windows.Media.Pen(_palette.SubtleBorder, 1.0)
                     {
                         StartLineCap = PenLineCap.Round,
@@ -2225,13 +2217,16 @@ namespace WindowsDynamicIsland.UI
         {
             if (_hwnd == IntPtr.Zero || _settings.Current.IsIslandHidden) return;
 
-            // 1. Check per-monitor fullscreen (only hides if fullscreen app is on the SAME monitor as the island!)
-            bool isFsOnThisMonitor = _settings.Current.HideInFullscreenApps &&
-                                     NativeMethods.IsForegroundWindowFullscreen(_hwnd);
-            if (isFsOnThisMonitor != _isFullscreenRetracted)
+            // Giving the island keyboard focus must not look like leaving the fullscreen app.
+            var foreground = NativeMethods.GetForegroundWindow();
+            if (foreground != IntPtr.Zero && foreground != _hwnd)
             {
-                SetFullscreenRetractedState(isFsOnThisMonitor);
+                _fullscreenWindow = _settings.Current.HideInFullscreenApps && NativeMethods.IsForegroundWindowFullscreen(_hwnd)
+                    ? foreground : IntPtr.Zero;
+                if (_fullscreenWindow != _fullscreenOverride) _fullscreenOverride = IntPtr.Zero;
             }
+            if (!_settings.Current.HideInFullscreenApps) _fullscreenWindow = IntPtr.Zero;
+            SetFullscreenRetractedState(_fullscreenWindow != IntPtr.Zero && _fullscreenWindow != _fullscreenOverride);
             if (_isFullscreenRetracted) return;
 
             // 2. Check cursor proximity to top edge / capsule
@@ -2358,11 +2353,6 @@ namespace WindowsDynamicIsland.UI
             {
                 _liquidContourPath.Stroke = _palette.SubtleBorder;
             }
-            if (_liquidInnerGlassRimPath != null)
-            {
-                _liquidInnerGlassRimPath.Stroke = _palette.HairlineBorder;
-                _liquidInnerGlassRimPath.Visibility = _palette.IsGlass ? Visibility.Visible : Visibility.Collapsed;
-            }
             if (_shadowPath != null)
                 _shadowPath.Visibility = _palette.IsGlass ? Visibility.Collapsed : Visibility.Visible;
             if (_shadowEffect != null)
@@ -2374,7 +2364,7 @@ namespace WindowsDynamicIsland.UI
             if (_specularTopLine != null)
             {
                 _specularTopLine.Background = _palette.SpecularTopRim;
-                _specularTopLine.Visibility = (fusedTop && !_palette.IsGlass) ? Visibility.Collapsed : Visibility.Visible;
+                _specularTopLine.Visibility = fusedTop ? Visibility.Collapsed : Visibility.Visible;
             }
 
             // Collapsed layer colors
@@ -2419,6 +2409,7 @@ namespace WindowsDynamicIsland.UI
                     ApplyNavTabButtonVisual(i);
                 }
             }
+            if (_navTray != null) _navTray.Background = _palette.CardBackground;
             UpdatePinButtonVisual();
             UpdateCloseButtonVisual();
         }
@@ -2546,6 +2537,7 @@ namespace WindowsDynamicIsland.UI
             RegisterGlobalHotkeys();
             PositionWindowOnSelectedMonitor();
 
+            _ = _sys.InitializeNotificationListenerAsync();
             await _media.InitializeAsync();
             await _weather.RefreshAllAsync();
         }
@@ -2635,7 +2627,7 @@ namespace WindowsDynamicIsland.UI
                     }
                     else
                     {
-                        SetExpandedState(!_isExpanded);
+                        SetExpandedState(_isFullscreenRetracted || !_isExpanded);
                     }
                     handled = true;
                 }

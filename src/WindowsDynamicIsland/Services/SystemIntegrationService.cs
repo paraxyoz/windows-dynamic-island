@@ -6,6 +6,7 @@ using System.IO.Pipes;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -34,7 +35,6 @@ namespace WindowsDynamicIsland.Services
         private readonly DispatcherTimer _keyboardStateTimer;
         private readonly DispatcherTimer _powerCountdownTimer;
         private CancellationTokenSource _ipcCts;
-        private CancellationTokenSource _bgMonitorCts;
 
         // Low-level keyboard hook for near-zero-latency Caps Lock & Layout switch detection
         private IntPtr _keyboardHookHandle = IntPtr.Zero;
@@ -46,9 +46,9 @@ namespace WindowsDynamicIsland.Services
         private bool _numLockOn;
         private bool _initialStateLoaded;
 
-        private readonly HashSet<uint> _seenNotificationIds = new HashSet<uint>();
         private UserNotificationListener _notificationListener;
         private bool _notificationsSupported;
+        private bool _disposed;
 
         // Power management countdown
         public PowerActionKind PendingPowerAction { get; private set; } = PowerActionKind.None;
@@ -89,7 +89,7 @@ namespace WindowsDynamicIsland.Services
 
             CheckKeyboardStateImmediate();
             StartIpcPipeServer();
-            StartBackgroundSystemMonitor();
+
         }
 
         private void InstallLowLevelKeyboardHook()
@@ -267,144 +267,116 @@ namespace WindowsDynamicIsland.Services
             });
         }
 
-        // --- Fully Asynchronous Background Worker for Notifications & AI Process Watcher ---
-        // Never touches the UI thread except to dispatch a ready notification!
-        private void StartBackgroundSystemMonitor()
-        {
-            _bgMonitorCts = new CancellationTokenSource();
-            CancellationToken token = _bgMonitorCts.Token;
-
-            Task.Run(async () =>
-            {
-                await InitializeNotificationListenerAsync();
-
-                while (!token.IsCancellationRequested)
-                {
-                    try
-                    {
-                        await CheckWindowsNotificationsBackgroundAsync();
-                    }
-                    catch
-                    {
-                    }
-
-                    try
-                    {
-                        await Task.Delay(1800, token);
-                    }
-                    catch
-                    {
-                        break;
-                    }
-                }
-            }, token);
-        }
-
-        private async Task InitializeNotificationListenerAsync()
+        public async Task InitializeNotificationListenerAsync()
         {
             try
             {
                 _notificationListener = UserNotificationListener.Current;
                 var access = await _notificationListener.RequestAccessAsync();
-                if (access == UserNotificationListenerAccessStatus.Allowed)
+                if (_disposed) return;
+                if (access != UserNotificationListenerAccessStatus.Allowed)
                 {
-                    _notificationsSupported = true;
-                    var existing = await _notificationListener.GetNotificationsAsync(NotificationKinds.Toast);
-                    if (existing != null)
-                    {
-                        lock (_seenNotificationIds)
-                        {
-                            foreach (var n in existing)
-                            {
-                                _seenNotificationIds.Add(n.Id);
-                            }
-                        }
-                    }
+                    StorageService.LogInfo("Windows notification access: " + access);
+                    return;
                 }
+                _notificationsSupported = true;
+                _notificationListener.NotificationChanged += OnWindowsNotificationChanged;
             }
-            catch
+            catch (Exception ex)
             {
                 _notificationsSupported = false;
+                StorageService.LogError(nameof(InitializeNotificationListenerAsync), ex);
             }
         }
 
-        private async Task CheckWindowsNotificationsBackgroundAsync()
+        private void OnWindowsNotificationChanged(UserNotificationListener sender, UserNotificationChangedEventArgs args)
         {
-            if (!_notificationsSupported || _notificationListener == null || !_settings.Current.ShowSystemNotifications)
-                return;
-
+            if (_disposed || args.ChangeKind != UserNotificationChangedKind.Added || !_settings.Current.ShowSystemNotifications) return;
             try
             {
-                var toasts = await _notificationListener.GetNotificationsAsync(NotificationKinds.Toast);
-                if (toasts == null) return;
-
-                foreach (var toast in toasts)
+                var toast = sender.GetNotification(args.UserNotificationId);
+                if (toast == null) return;
+                var appName = toast.AppInfo?.DisplayInfo?.DisplayName;
+                var appId = toast.AppInfo?.AppUserModelId;
+                bool telegram = (appName?.IndexOf("Telegram", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
+                                (appId?.IndexOf("Telegram", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0;
+                var binding = toast.Notification?.Visual?.GetBinding(KnownNotificationBindings.ToastGeneric);
+                var texts = binding?.GetTextElements()?.Select(t => t.Text?.Trim())
+                    .Where(t => !string.IsNullOrWhiteSpace(t)).ToList() ?? new List<string>();
+                string senderName = texts.FirstOrDefault() ?? appName ?? "Уведомление";
+                if (string.Equals(senderName, appName, StringComparison.OrdinalIgnoreCase) && texts.Count >= 3)
                 {
-                    bool isNew;
-                    lock (_seenNotificationIds)
-                    {
-                        isNew = _seenNotificationIds.Add(toast.Id);
-                    }
-                    if (!isNew) continue;
-
-                    string appName = "Уведомление";
-                    try
-                    {
-                        if (toast.AppInfo?.DisplayInfo != null && !string.IsNullOrWhiteSpace(toast.AppInfo.DisplayInfo.DisplayName))
-                        {
-                            appName = toast.AppInfo.DisplayInfo.DisplayName;
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    string title = appName;
-                    string body = string.Empty;
-
-                    try
-                    {
-                        var binding = toast.Notification?.Visual?.GetBinding(KnownNotificationBindings.ToastGeneric);
-                        if (binding != null)
-                        {
-                            var texts = binding.GetTextElements()?.Select(t => t.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
-                            if (texts != null && texts.Count > 0)
-                            {
-                                title = $"{appName}: {texts[0]}";
-                                if (texts.Count > 1)
-                                {
-                                    body = string.Join(" ", texts.Skip(1));
-                                }
-                            }
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    string badge = "УВЕД";
-                    string lowerApp = appName.ToLowerInvariant();
-                    if (lowerApp.Contains("telegram")) badge = "TG";
-                    else if (lowerApp.Contains("discord")) badge = "DS";
-
-                    Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
-                    {
-                        _eventQueue?.Enqueue(new IslandEvent
-                        {
-                            EventType = IslandEventType.AppNotification,
-                            Priority = IslandEventPriority.High,
-                            Title = title,
-                            Subtitle = string.IsNullOrWhiteSpace(body) ? "Новое системное уведомление" : body,
-                            BadgeText = badge,
-                            DurationMs = 3800,
-                            Mood = SmileyMood.NotificationAlert
-                        });
-                    }));
+                    texts.RemoveAt(0);
+                    senderName = texts[0];
                 }
+                string body = string.Join(" ", texts.Skip(1));
+                var chat = telegram ? TelegramChatUri(senderName) : null;
+
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    var notification = new IslandEvent
+                    {
+                        EventType = IslandEventType.AppNotification,
+                        Priority = IslandEventPriority.High,
+                        Title = senderName,
+                        Subtitle = string.IsNullOrWhiteSpace(body) ? "Новое уведомление" : body,
+                        BadgeText = telegram ? "Telegram" : appName ?? "Windows",
+                        DurationMs = telegram ? 8500 : 5600,
+                        Mood = SmileyMood.NotificationAlert,
+                        PrimaryActionLabel = chat != null ? "Открыть " + senderName : "Уведомления"
+                    };
+                    notification.PrimaryAction = () =>
+                    {
+                        if (_eventQueue.CurrentEvent == notification) _eventQueue.DismissCurrent();
+                        if (chat == null || !TryOpenChat(chat)) OpenNotificationCenter();
+                    };
+                    _eventQueue.Enqueue(notification);
+                }));
             }
-            catch
+            catch (Exception ex)
             {
+                StorageService.LogError(nameof(OnWindowsNotificationChanged), ex);
             }
+        }
+
+        public static Uri TelegramChatUri(string senderName)
+        {
+            if (string.IsNullOrEmpty(senderName) || !Regex.IsMatch(senderName, @"\A@[A-Za-z][A-Za-z0-9_]{3,31}\z"))
+                return null;
+            return new Uri("tg://resolve?domain=" + senderName.Substring(1));
+        }
+
+        private static bool TryOpenChat(Uri chat)
+        {
+            try
+            {
+                using (Process.Start(new ProcessStartInfo(chat.OriginalString) { UseShellExecute = true })) { }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                StorageService.LogError(nameof(TryOpenChat), ex);
+                return false;
+            }
+        }
+
+        private static void OpenNotificationCenter()
+        {
+            // The original Windows notification retains its app-provided chat activation.
+            int windowsBuild = Environment.OSVersion.Version.Build;
+            try
+            {
+                using (var version = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+                    if (int.TryParse(version?.GetValue("CurrentBuildNumber") as string, out int build)) windowsBuild = build;
+            }
+            catch (System.Security.SecurityException) { }
+
+            byte key = windowsBuild >= 22000 ? (byte)0x4E : (byte)0x41; // Win+N / Win+A
+            NativeMethods.keybd_event((byte)NativeMethods.VK_LWIN, 0, NativeMethods.KEYEVENTF_EXTENDEDKEY, UIntPtr.Zero);
+            NativeMethods.keybd_event(key, 0, 0, UIntPtr.Zero);
+            NativeMethods.keybd_event(key, 0, NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            NativeMethods.keybd_event((byte)NativeMethods.VK_LWIN, 0,
+                NativeMethods.KEYEVENTF_EXTENDEDKEY | NativeMethods.KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
 
         // --- IPC Named Pipe Server for CLI Commands ---
@@ -597,6 +569,7 @@ namespace WindowsDynamicIsland.Services
 
         public void Dispose()
         {
+            _disposed = true;
             if (_keyboardHookHandle != IntPtr.Zero)
             {
                 NativeMethods.UnhookWindowsHookEx(_keyboardHookHandle);
@@ -605,7 +578,8 @@ namespace WindowsDynamicIsland.Services
             _keyboardStateTimer?.Stop();
             _powerCountdownTimer?.Stop();
             _ipcCts?.Cancel();
-            _bgMonitorCts?.Cancel();
+            if (_notificationListener != null && _notificationsSupported)
+                _notificationListener.NotificationChanged -= OnWindowsNotificationChanged;
             _audioController?.Dispose();
         }
     }

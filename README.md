@@ -96,8 +96,12 @@ The Glass theme adds a translucent graphite surface with a soft highlight around
 ### 8. Media Player and Lyrics
 
 - Seek from the player on the Home tab when the active Windows media session supports it.
-- Open **Текст песни** to see lyrics beside the cover. Timed lyrics follow playback and update after seeking.
+- Open **Текст песни** to see lyrics beside the cover. Timed lyrics scroll smoothly and follow playback after seeking. Words highlight individually when LRCLIB provides word timings. Click a line to seek in players that support it.
 - The lyrics panel looks up the current track in [LRCLIB](https://lrclib.net/docs) when open. If only plain lyrics are available, the panel shows them without timing.
+
+### App Notifications
+
+When Windows grants notification access, the island shows new messages with their sender and preview. Telegram notifications with an explicit @username can open the chat directly. For other notifications the action opens the Windows Notification Center, where the original notification can open its conversation. The portable build may be denied notification access by Windows.
 
 ## Default Hotkeys
 

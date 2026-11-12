@@ -62,7 +62,8 @@ namespace WindowsDynamicIsland.Services
             // (e.g. user changes track, adjusts volume, or pauses music while another non-critical banner was playing)
             if (CurrentEvent != null &&
                 (ev.Priority > CurrentEvent.Priority ||
-                 (CurrentEvent.Priority < IslandEventPriority.Critical && (isTransient || ev.Priority >= CurrentEvent.Priority))))
+                 (CurrentEvent.Priority < IslandEventPriority.Critical && CurrentEvent.PrimaryAction == null &&
+                  (isTransient || ev.Priority >= CurrentEvent.Priority))))
             {
                 ShowImmediate(ev);
                 return;

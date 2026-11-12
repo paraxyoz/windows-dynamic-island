@@ -139,27 +139,39 @@ namespace WindowsDynamicIsland.UI.Views
             root.Children.Add(searchBarContainer);
 
             // --- 2. Asymmetric Main Dashboard Grid ---
-            var contentGrid = new Grid { Margin = new Thickness(0, 8, 0, 0) };
-            contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.22, GridUnitType.Star) });
+            var contentGrid = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+            contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.12, GridUnitType.Star) });
             contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
             contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.0, GridUnitType.Star) });
 
             // Left Column: Rich Media Session Player + System Audio Mixer
             var leftGrid = new Grid();
             leftGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            leftGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(8) });
+            leftGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1) });
             leftGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             var mediaCard = BuildMediaPlayerCard();
+            mediaCard.Background = Brushes.Transparent;
+            mediaCard.BorderThickness = new Thickness(0);
             Grid.SetRow(mediaCard, 0);
             leftGrid.Children.Add(mediaCard);
 
+            var seam = new Border
+            {
+                Background = _palette.HairlineBorder,
+                Margin = new Thickness(15, 0, 15, 0)
+            };
+            Grid.SetRow(seam, 1);
+            leftGrid.Children.Add(seam);
             var volumeCard = BuildVolumeCard();
+            volumeCard.Background = Brushes.Transparent;
+            volumeCard.BorderThickness = new Thickness(0);
             Grid.SetRow(volumeCard, 2);
             leftGrid.Children.Add(volumeCard);
 
-            Grid.SetColumn(leftGrid, 0);
-            contentGrid.Children.Add(leftGrid);
+            var playerSurface = ThemeTokens.CreateCard(_palette, 17, new Thickness(0));
+            playerSurface.Child = leftGrid;
+            contentGrid.Children.Add(playerSurface);
 
             // Right Column: Keyboard Layout & Locks + Power Management & AI Watcher
             var rightGrid = _dashboardDetails = new Grid();
@@ -191,7 +203,7 @@ namespace WindowsDynamicIsland.UI.Views
             DockPanel.SetDock(lyricsTitle, Dock.Top);
             lyricsLayout.Children.Add(lyricsTitle);
             lyricsLayout.Children.Add(_lyricsView);
-            _lyricsCard = ThemeTokens.CreateCard(_palette, 14, new Thickness(16, 13, 10, 12));
+            _lyricsCard = ThemeTokens.CreateCard(_palette, 17, new Thickness(18, 14, 10, 12));
             _lyricsCard.Child = lyricsLayout;
             Grid.SetColumn(_lyricsCard, 2);
             contentGrid.Children.Add(_lyricsCard);
@@ -873,9 +885,9 @@ namespace WindowsDynamicIsland.UI.Views
             _searchResultsPanel.Children.Add(row);
         }
 
-        private UIElement BuildMediaPlayerCard()
+        private Border BuildMediaPlayerCard()
         {
-            var card = ThemeTokens.CreateCard(_palette, 12, new Thickness(14, 11, 14, 11));
+            var card = ThemeTokens.CreateCard(_palette, 17, new Thickness(15, 12, 15, 12));
             var layoutGrid = new Grid { VerticalAlignment = VerticalAlignment.Stretch };
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 0: Header + Live Status Pill
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Row 1: Artwork + Metadata
@@ -994,7 +1006,6 @@ namespace WindowsDynamicIsland.UI.Views
             var timelineStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
             _seekSlider = new Slider
             {
-                IsMoveToPointEnabled = true,
                 SmallChange = 5,
                 LargeChange = 15,
                 Maximum = 0,
@@ -1002,19 +1013,36 @@ namespace WindowsDynamicIsland.UI.Views
             };
             System.Windows.Automation.AutomationProperties.SetName(_seekSlider, "Позиция воспроизведения, секунды");
             ToolTipService.SetShowOnDisabled(_seekSlider, true);
-            _seekSlider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler((s, e) =>
+            _seekSlider.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((s, e) =>
             {
+                if (!_media.CanSeek || !_seekSlider.CaptureMouse()) return;
+                e.Handled = true;
+                _seekSlider.Focus();
                 _dragTrackVersion = _media.TrackVersion;
-            }));
-            _seekSlider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(async (s, e) =>
+                PreviewSeek(e);
+            }), true);
+            _seekSlider.PreviewMouseMove += (s, e) =>
             {
-                int? track = _dragTrackVersion;
+                if (_dragTrackVersion.HasValue && _seekSlider.IsMouseCaptured)
+                    PreviewSeek(e);
+            };
+            _seekSlider.AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(async (s, e) =>
+            {
+                if (!_dragTrackVersion.HasValue) return;
+                e.Handled = true;
+                PreviewSeek(e);
+                int track = _dragTrackVersion.Value;
                 _dragTrackVersion = null;
-                if (!e.Canceled && track == _media.TrackVersion)
-                    await SeekFromSliderAsync();
-                else
-                    RefreshTimelineUi();
-            }));
+                _seekSlider.ReleaseMouseCapture();
+                if (track == _media.TrackVersion) await SeekFromSliderAsync();
+                else RefreshTimelineUi();
+            }), true);
+            _seekSlider.LostMouseCapture += (s, e) =>
+            {
+                if (!_dragTrackVersion.HasValue) return;
+                _dragTrackVersion = null;
+                RefreshTimelineUi();
+            };
             _seekSlider.ValueChanged += async (s, e) =>
             {
                 if (_updatingSeekSlider) return;
@@ -1102,7 +1130,7 @@ namespace WindowsDynamicIsland.UI.Views
             return button;
         }
 
-        private UIElement BuildVolumeCard()
+        private Border BuildVolumeCard()
         {
             var card = ThemeTokens.CreateCard(_palette, 12, new Thickness(12, 10, 12, 10));
             var stack = new StackPanel();
@@ -1294,7 +1322,7 @@ namespace WindowsDynamicIsland.UI.Views
 
         private UIElement BuildPowerAndAiCard()
         {
-            var card = ThemeTokens.CreateCard(_palette, 12, new Thickness(14, 11, 14, 11));
+            var card = ThemeTokens.CreateCard(_palette, 17, new Thickness(15, 12, 15, 12));
             var layoutGrid = new Grid { VerticalAlignment = VerticalAlignment.Stretch };
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 0: Header
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 1: Power Buttons
@@ -1642,6 +1670,18 @@ namespace WindowsDynamicIsland.UI.Views
             }
             _timePositionText.Text = FormatMediaTime(_media.Position);
             _timeDurationText.Text = FormatMediaTime(_media.Duration);
+            if (!_media.CanSeek && _media.HasActiveSession && string.IsNullOrEmpty(_seekStatus.Text))
+                _seekStatus.Text = "Плеер не разрешает перемотку";
+            else if (_media.CanSeek && _seekStatus.Text == "Плеер не разрешает перемотку")
+                _seekStatus.Text = string.Empty;
+        }
+
+        private void PreviewSeek(MouseEventArgs e)
+        {
+            var track = _seekSlider.Template.FindName("PART_Track", _seekSlider) as Track;
+            if (track == null) return;
+            double value = track.ValueFromPoint(e.GetPosition(track));
+            if (!double.IsNaN(value) && !double.IsInfinity(value)) _seekSlider.Value = value;
         }
 
         private async System.Threading.Tasks.Task SeekFromSliderAsync()
