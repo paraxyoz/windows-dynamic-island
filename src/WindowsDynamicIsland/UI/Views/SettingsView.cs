@@ -312,7 +312,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 notificationStatus.Text = _system.NotificationsListenerActive
                     ? "Остров получает системные уведомления."
-                    : "Для доступа к уведомлениям откройте MSIX-версию острова и подтвердите запрос Windows.";
+                    : _system.NotificationAccessDetail ?? "Подключите уведомления и подтвердите запрос Windows.";
             }
             var notificationSettings = new System.Windows.Controls.Button
             {

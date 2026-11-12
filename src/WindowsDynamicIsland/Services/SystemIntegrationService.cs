@@ -49,6 +49,9 @@ namespace WindowsDynamicIsland.Services
         private UserNotificationListener _notificationListener;
         private bool _notificationsSupported;
         private bool _requestingNotificationAccess;
+        private bool _notificationEventRegistered;
+        private DispatcherTimer _notificationPoll;
+        private HashSet<uint> _visibleNotificationIds = new HashSet<uint>();
         private bool _disposed;
 
         // Power management countdown
@@ -61,6 +64,7 @@ namespace WindowsDynamicIsland.Services
         public bool IsNumLockOn => _numLockOn;
         public SystemAudioController Audio => _audioController;
         public bool NotificationsListenerActive => _notificationsSupported;
+        public string NotificationAccessDetail { get; private set; }
 
         public event Action KeyboardStateChanged;
         public event Action<int, bool> VolumeStateChanged;
@@ -275,17 +279,34 @@ namespace WindowsDynamicIsland.Services
             try
             {
                 _notificationListener = UserNotificationListener.Current;
-                var access = _notificationListener.GetAccessStatus();
-                if (requestAccess && access == UserNotificationListenerAccessStatus.Unspecified)
-                    access = await _notificationListener.RequestAccessAsync();
+                var access = requestAccess
+                    ? await _notificationListener.RequestAccessAsync()
+                    : _notificationListener.GetAccessStatus();
                 if (_disposed) return;
                 StorageService.LogInfo("Windows notification access: " + access);
+                NotificationAccessDetail = access == UserNotificationListenerAccessStatus.Denied
+                    ? "Windows отклонила доступ. Проверьте разрешение для Windows Dynamic Island."
+                    : "Windows ещё не подтвердила доступ к уведомлениям.";
                 if (access != UserNotificationListenerAccessStatus.Allowed) return;
-                _notificationListener.NotificationChanged += OnWindowsNotificationChanged;
+                try
+                {
+                    _notificationListener.NotificationChanged += OnWindowsNotificationChanged;
+                    _notificationEventRegistered = true;
+                }
+                catch (Exception ex) when (ex.HResult == unchecked((int)0x80070490) || ex.HResult == unchecked((int)0x800706BE))
+                {
+                    var current = await _notificationListener.GetNotificationsAsync(NotificationKinds.Toast);
+                    if (_disposed) return;
+                    _visibleNotificationIds = new HashSet<uint>(current.Select(item => item.Id));
+                    _notificationPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+                    _notificationPoll.Tick += PollWindowsNotifications;
+                    _notificationPoll.Start();
+                }
                 _notificationsSupported = true;
             }
             catch (Exception ex)
             {
+                NotificationAccessDetail = $"Windows не подключила уведомления (0x{ex.HResult:X8}).";
                 StorageService.LogError(nameof(InitializeNotificationListenerAsync), ex);
             }
             finally
@@ -299,8 +320,40 @@ namespace WindowsDynamicIsland.Services
             if (_disposed || args.ChangeKind != UserNotificationChangedKind.Added || !_settings.Current.ShowSystemNotifications) return;
             try
             {
-                var toast = sender.GetNotification(args.UserNotificationId);
-                if (toast == null) return;
+                ForwardWindowsNotification(sender.GetNotification(args.UserNotificationId));
+            }
+            catch (Exception ex)
+            {
+                StorageService.LogError(nameof(OnWindowsNotificationChanged), ex);
+            }
+        }
+
+        private async void PollWindowsNotifications(object sender, EventArgs args)
+        {
+            _notificationPoll.Stop();
+            try
+            {
+                var current = await _notificationListener.GetNotificationsAsync(NotificationKinds.Toast);
+                if (_disposed) return;
+                if (_settings.Current.ShowSystemNotifications)
+                    foreach (var toast in current.Where(toast => !_visibleNotificationIds.Contains(toast.Id)).OrderBy(toast => toast.CreationTime))
+                        ForwardWindowsNotification(toast);
+                _visibleNotificationIds = new HashSet<uint>(current.Select(toast => toast.Id));
+                _notificationPoll.Start();
+            }
+            catch (Exception ex)
+            {
+                _notificationsSupported = false;
+                NotificationAccessDetail = $"Windows остановила получение уведомлений (0x{ex.HResult:X8}).";
+                StorageService.LogError(nameof(PollWindowsNotifications), ex);
+            }
+        }
+
+        private void ForwardWindowsNotification(UserNotification toast)
+        {
+            if (toast == null) return;
+            try
+            {
                 var appName = toast.AppInfo?.DisplayInfo?.DisplayName;
                 var appId = toast.AppInfo?.AppUserModelId;
                 string messenger = IdentifyMessenger(appName, appId);
@@ -340,7 +393,7 @@ namespace WindowsDynamicIsland.Services
             }
             catch (Exception ex)
             {
-                StorageService.LogError(nameof(OnWindowsNotificationChanged), ex);
+                StorageService.LogError(nameof(ForwardWindowsNotification), ex);
             }
         }
 
@@ -593,7 +646,8 @@ namespace WindowsDynamicIsland.Services
             _keyboardStateTimer?.Stop();
             _powerCountdownTimer?.Stop();
             _ipcCts?.Cancel();
-            if (_notificationListener != null && _notificationsSupported)
+            _notificationPoll?.Stop();
+            if (_notificationListener != null && _notificationEventRegistered)
                 _notificationListener.NotificationChanged -= OnWindowsNotificationChanged;
             _audioController?.Dispose();
         }

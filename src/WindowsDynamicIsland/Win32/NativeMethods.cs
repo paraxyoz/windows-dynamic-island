@@ -139,6 +139,9 @@ namespace WindowsDynamicIsland.Win32
         [DllImport("shell32.dll", SetLastError = true)]
         public static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        public static extern int GetCurrentPackageFullName(ref int packageFullNameLength, StringBuilder packageFullName);
+
         [DllImport("user32.dll")]
         public static extern short GetKeyState(int nVirtKey);
 

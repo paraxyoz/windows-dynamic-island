@@ -15,7 +15,10 @@ namespace WindowsDynamicIsland
         {
             try
             {
-                WindowsDynamicIsland.Win32.NativeMethods.SetCurrentProcessExplicitAppUserModelID("Paraxyoz.WindowsDynamicIsland");
+                int packageNameLength = 0;
+                const int appModelErrorNoPackage = 15700;
+                if (WindowsDynamicIsland.Win32.NativeMethods.GetCurrentPackageFullName(ref packageNameLength, null) == appModelErrorNoPackage)
+                    WindowsDynamicIsland.Win32.NativeMethods.SetCurrentProcessExplicitAppUserModelID("Paraxyoz.WindowsDynamicIsland");
             }
             catch
             {
