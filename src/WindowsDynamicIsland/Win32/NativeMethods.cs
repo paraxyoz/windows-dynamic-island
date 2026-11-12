@@ -31,8 +31,6 @@ namespace WindowsDynamicIsland.Win32
         public const int HTTRANSPARENT = -1;
         public const int HTCLIENT = 1;
 
-        public const uint WDA_NONE = 0x00000000;
-        public const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
 
         public const int WH_KEYBOARD_LL = 13;
         public const int WM_KEYDOWN = 0x0100;
@@ -192,9 +190,6 @@ namespace WindowsDynamicIsland.Win32
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
 
         public static bool IsCapsLockOn()
         {

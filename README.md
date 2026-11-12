@@ -43,6 +43,8 @@
 
 ## Visual Themes
 
+The Glass theme adds a translucent graphite surface with a soft highlight around the island.
+
 <div align="center">
 
 | Dark Theme (OLED Black) | Light Theme |
@@ -91,6 +93,12 @@
 
 ---
 
+### 8. Media Player and Lyrics
+
+- Seek from the player on the Home tab when the active Windows media session supports it.
+- Open **Текст песни** to see lyrics beside the cover. Timed lyrics follow playback and update after seeking.
+- The lyrics panel looks up the current track in [LRCLIB](https://lrclib.net/docs) when open. If only plain lyrics are available, the panel shows them without timing.
+
 ## Default Hotkeys
 
 | Key Combination | Action |
@@ -118,7 +126,7 @@
 ### Prerequisites
 - Windows 10 (version 1903+) or Windows 11 (x64)
 - .NET Framework 4.8 Developer Pack
-- MSBuild (Visual Studio 2019/2022 or Build Tools)
+- MSBuild (Visual Studio Build Tools or .NET SDK) and a Windows SDK with Windows.winmd
 
 ### Build Steps
 ```powershell

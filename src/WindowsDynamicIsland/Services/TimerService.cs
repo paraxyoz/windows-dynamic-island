@@ -14,7 +14,8 @@ namespace WindowsDynamicIsland.Services
         // --- Countdown Timer ---
         private TimeSpan _timerDuration = TimeSpan.FromMinutes(5);
         private TimeSpan _timerRemaining = TimeSpan.FromMinutes(5);
-        private DateTime _timerEndAt;
+        private readonly Stopwatch _countdown = new Stopwatch();
+        private TimeSpan _remainingAtStart;
         private bool _timerRunning;
         private bool _timerPaused;
 
@@ -75,11 +76,13 @@ namespace WindowsDynamicIsland.Services
 
         public void StartTimer()
         {
+            if (_timerRunning) return;
             if (_timerRemaining.TotalSeconds <= 0)
             {
                 _timerRemaining = _timerDuration;
             }
-            _timerEndAt = DateTime.Now.Add(_timerRemaining);
+            _remainingAtStart = _timerRemaining;
+            _countdown.Restart();
             _timerRunning = true;
             _timerPaused = false;
             EnsureLoopState();
@@ -89,7 +92,8 @@ namespace WindowsDynamicIsland.Services
         public void PauseTimer()
         {
             if (!_timerRunning) return;
-            _timerRemaining = _timerEndAt - DateTime.Now;
+            _countdown.Stop();
+            _timerRemaining = _remainingAtStart - _countdown.Elapsed;
             if (_timerRemaining < TimeSpan.Zero) _timerRemaining = TimeSpan.Zero;
             _timerRunning = false;
             _timerPaused = true;
@@ -105,6 +109,7 @@ namespace WindowsDynamicIsland.Services
 
         public void ResetTimer()
         {
+            _countdown.Reset();
             _timerRunning = false;
             _timerPaused = false;
             _timerRemaining = _timerDuration;
@@ -168,9 +173,10 @@ namespace WindowsDynamicIsland.Services
         {
             if (_timerRunning)
             {
-                _timerRemaining = _timerEndAt - DateTime.Now;
+                _timerRemaining = _remainingAtStart - _countdown.Elapsed;
                 if (_timerRemaining <= TimeSpan.Zero)
                 {
+                    _countdown.Reset();
                     _timerRemaining = _timerDuration;
                     _timerRunning = false;
                     _timerPaused = false;

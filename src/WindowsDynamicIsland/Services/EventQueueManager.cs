@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Media;
 using System.Windows.Threading;
 using WindowsDynamicIsland.Models;
 
@@ -78,8 +76,9 @@ namespace WindowsDynamicIsland.Services
             {
                 if (_queue.Count < 8)
                 {
-                    _queue.Add(ev);
-                    _queue.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+                    int nextLowerPriority = _queue.FindIndex(item => item.Priority < ev.Priority);
+                    if (nextLowerPriority < 0) _queue.Add(ev);
+                    else _queue.Insert(nextLowerPriority, ev);
                 }
             }
         }

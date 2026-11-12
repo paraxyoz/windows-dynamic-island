@@ -44,76 +44,45 @@ namespace WindowsDynamicIsland.UI
         {
             if (mode == AppThemeMode.Ios26Glass)
             {
-                // iOS 26 LIQUID GLASS THEME:
-                // Multi-layered optical refractive crystal surfaces, diagonal 135° specular rim borders,
-                // inner meniscus cushions, and deep translucent frosted backdrop blur
-                byte glassAlpha = (byte)Math.Round(Math.Max(0.32, Math.Min(0.68, opacity * 0.46)) * 255);
-
+                byte tint = (byte)Math.Round(196 + Math.Max(0.0, Math.Min(1.0, opacity)) * 31);
                 return new ThemePalette
                 {
-                    IsLight = false,
                     IsGlass = true,
                     CapsuleBackground = MakeLinearGradient(
-                        new Point(0, 0), new Point(1, 1),
-                        (0.0, Color.FromArgb(glassAlpha, 38, 46, 66)),
-                        (0.5, Color.FromArgb((byte)(glassAlpha * 0.84), 20, 25, 38)),
-                        (1.0, Color.FromArgb(glassAlpha, 32, 40, 58))),
+                        new Point(0, 0), new Point(0.35, 1),
+                        (0.0, Color.FromArgb(tint, 45, 49, 58)),
+                        (0.54, Color.FromArgb(tint, 23, 26, 34)),
+                        (1.0, Color.FromArgb(tint, 32, 35, 45))),
                     PanelBackground = MakeLinearGradient(
-                        new Point(0, 0), new Point(1, 1),
-                        (0.0, Color.FromArgb(glassAlpha, 34, 42, 60)),
-                        (0.5, Color.FromArgb((byte)(glassAlpha * 0.82), 18, 22, 34)),
-                        (1.0, Color.FromArgb(glassAlpha, 28, 36, 54))),
-                    CardBackground = MakeLinearGradient(
-                        new Point(0, 0), new Point(1, 1),
-                        (0.0, Color.FromArgb(34, 255, 255, 255)),
-                        (0.5, Color.FromArgb(14, 255, 255, 255)),
-                        (1.0, Color.FromArgb(26, 225, 238, 255))),
-                    RaisedBackground = MakeLinearGradient(
-                        new Point(0, 0), new Point(0, 1),
-                        (0.0, Color.FromArgb(52, 255, 255, 255)),
-                        (0.48, Color.FromArgb(20, 255, 255, 255)),
-                        (1.0, Color.FromArgb(36, 220, 235, 255))),
-                    HoverBackground = MakeLinearGradient(
-                        new Point(0, 0), new Point(0, 1),
-                        (0.0, Color.FromArgb(84, 255, 255, 255)),
-                        (0.5, Color.FromArgb(38, 255, 255, 255)),
-                        (1.0, Color.FromArgb(62, 225, 240, 255))),
-                    HairlineBorder = MakeLinearGradient(
-                        new Point(0, 0), new Point(1, 1),
-                        (0.0, Color.FromArgb(148, 255, 255, 255)),
-                        (0.38, Color.FromArgb(42, 255, 255, 255)),
-                        (0.68, Color.FromArgb(28, 255, 255, 255)),
-                        (1.0, Color.FromArgb(108, 220, 238, 255))),
+                        new Point(0, 0), new Point(0.3, 1),
+                        (0.0, Color.FromArgb(tint, 42, 46, 55)),
+                        (0.38, Color.FromArgb(tint, 26, 29, 37)),
+                        (1.0, Color.FromArgb(tint, 30, 33, 42))),
+                    CardBackground = MakeBrush(19, 244, 248, 255),
+                    RaisedBackground = MakeBrush(33, 244, 248, 255),
+                    HoverBackground = MakeBrush(53, 244, 248, 255),
+                    HairlineBorder = MakeBrush(35, 255, 255, 255),
                     SubtleBorder = MakeLinearGradient(
-                        new Point(0, 0), new Point(1, 1),
-                        (0.0, Color.FromArgb(215, 255, 255, 255)),
-                        (0.45, Color.FromArgb(72, 255, 255, 255)),
-                        (1.0, Color.FromArgb(165, 215, 236, 255))),
+                        new Point(0, 0), new Point(0.35, 1),
+                        (0.0, Color.FromArgb(150, 255, 255, 255)),
+                        (0.37, Color.FromArgb(37, 255, 255, 255)),
+                        (1.0, Color.FromArgb(85, 227, 235, 253))),
                     SpecularTopRim = MakeLinearGradient(
                         new Point(0, 0), new Point(1, 0),
                         (0.0, Color.FromArgb(0, 255, 255, 255)),
-                        (0.25, Color.FromArgb(180, 255, 255, 255)),
-                        (0.5, Color.FromArgb(235, 255, 255, 255)),
-                        (0.75, Color.FromArgb(180, 255, 255, 255)),
+                        (0.44, Color.FromArgb(128, 255, 255, 255)),
                         (1.0, Color.FromArgb(0, 255, 255, 255))),
-                    ShadowColor = Color.FromRgb(4, 8, 18),
-                    ShadowOpacity = 0.48,
-                    PrimaryText = MakeBrush(255, 248, 250, 255),
-                    SecondaryText = MakeBrush(218, 232, 238, 255),
-                    MutedText = MakeBrush(158, 218, 226, 248),
-                    Accent = MakeLinearGradient(
-                        new Point(0, 0), new Point(1, 1),
-                        (0.0, Color.FromArgb(108, 255, 255, 255)),
-                        (0.5, Color.FromArgb(52, 210, 230, 255)),
-                        (1.0, Color.FromArgb(86, 255, 255, 255))),
-                    AccentSubtle = MakeLinearGradient(
-                        new Point(0, 0), new Point(0, 1),
-                        (0.0, Color.FromArgb(68, 255, 255, 255)),
-                        (1.0, Color.FromArgb(30, 220, 236, 255))),
-                    OnAccentText = MakeBrush(255, 255, 255, 255),
-                    Positive = MakeBrush(255, 110, 225, 160),
-                    Warning = MakeBrush(255, 250, 185, 95),
-                    Destructive = MakeBrush(255, 255, 105, 105),
+                    ShadowColor = Color.FromRgb(0, 0, 0),
+                    ShadowOpacity = 0.28,
+                    PrimaryText = MakeBrush(255, 249, 250, 255),
+                    SecondaryText = MakeBrush(255, 210, 216, 229),
+                    MutedText = MakeBrush(255, 181, 189, 208),
+                    Accent = MakeBrush(255, 210, 229, 255),
+                    AccentSubtle = MakeBrush(47, 176, 209, 255),
+                    OnAccentText = MakeBrush(255, 24, 38, 58),
+                    Positive = MakeBrush(255, 140, 236, 180),
+                    Warning = MakeBrush(255, 255, 203, 132),
+                    Destructive = MakeBrush(255, 255, 136, 142),
                     DestructiveSubtle = MakeBrush(95, 220, 60, 70)
                 };
             }
@@ -206,56 +175,18 @@ namespace WindowsDynamicIsland.UI
             return lgb;
         }
 
-        /// <summary>
-        /// Builds the multi-layer iOS 26 Liquid Glass inner optical cushion (Layer 2: curved meniscus + inner bevel,
-        /// Layer 3: upper crown specular glint) that sits behind a button or card's content.
-        /// </summary>
         public static UIElement BuildIos26GlassOverlay(double cornerRadius, bool isActive = false)
         {
-            double innerR = Math.Max(2.0, cornerRadius - 1.5);
-
-            var host = new Grid
+            return new Border
             {
                 IsHitTestVisible = false,
-                Margin = new Thickness(0)
-            };
-
-            // Layer 2: Inner curved glass cushion with 1px optical inset, top meniscus reflection, and bottom secondary refraction
-            var innerCushion = new Border
-            {
-                Margin = new Thickness(1.0),
-                CornerRadius = new CornerRadius(innerR),
-                BorderThickness = new Thickness(1, 1, 0, 1),
-                BorderBrush = MakeLinearGradient(
-                    new Point(0, 0), new Point(0.6, 1),
-                    (0.0, Color.FromArgb((byte)(isActive ? 150 : 96), 255, 255, 255)),
-                    (0.50, Color.FromArgb(18, 255, 255, 255)),
-                    (1.0, Color.FromArgb((byte)(isActive ? 75 : 44), 195, 228, 255))),
+                CornerRadius = new CornerRadius(cornerRadius),
                 Background = MakeLinearGradient(
                     new Point(0, 0), new Point(0, 1),
-                    (0.0, Color.FromArgb((byte)(isActive ? 92 : 56), 255, 255, 255)),
-                    (0.42, Color.FromArgb(6, 255, 255, 255)),
-                    (0.82, Color.FromArgb(14, 0, 0, 0)),
-                    (1.0, Color.FromArgb((byte)(isActive ? 48 : 28), 210, 235, 255)))
+                    (0.0, Color.FromArgb((byte)(isActive ? 54 : 24), 255, 255, 255)),
+                    (0.46, Color.FromArgb(0, 255, 255, 255)),
+                    (1.0, Color.FromArgb(17, 0, 0, 0)))
             };
-            host.Children.Add(innerCushion);
-
-            // Layer 3: Upper crown specular light streak
-            var crownGlint = new Border
-            {
-                Height = 1.0,
-                VerticalAlignment = VerticalAlignment.Top,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                Margin = new Thickness(Math.Max(4, cornerRadius * 0.65), 0.5, Math.Max(4, cornerRadius * 0.65), 0),
-                Background = MakeLinearGradient(
-                    new Point(0, 0), new Point(1, 0),
-                    (0.0, Color.FromArgb(0, 255, 255, 255)),
-                    (0.5, Color.FromArgb((byte)(isActive ? 230 : 168), 255, 255, 255)),
-                    (1.0, Color.FromArgb(0, 255, 255, 255)))
-            };
-            host.Children.Add(crownGlint);
-
-            return host;
         }
 
         public static UIElement WrapContentWithGlassLayers(

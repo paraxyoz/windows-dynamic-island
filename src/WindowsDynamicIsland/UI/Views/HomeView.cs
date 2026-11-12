@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using WindowsDynamicIsland.Models;
@@ -47,17 +48,21 @@ namespace WindowsDynamicIsland.UI.Views
 
         private Image _albumImage;
         private Border _albumFallbackIcon;
-        private Border _mediaStatusBadge;
-        private TextBlock _mediaStatusText;
         private TextBlock _trackTitleText;
         private TextBlock _trackArtistText;
-        private TextBlock _trackSourceSubtitle;
-        private Border _progressFill;
-        private Border _progressTrack;
         private TextBlock _timePositionText;
         private TextBlock _timeDurationText;
-        private Border _playPauseBtn;
         private System.Windows.Shapes.Path _playPauseIcon;
+        private Grid _dashboardDetails;
+        private Border _lyricsCard;
+        private TrackLyricsView _lyricsView;
+        private Button _lyricsButton;
+        private Slider _seekSlider;
+        private TextBlock _seekStatus;
+        private bool _showLyrics;
+        private bool _updatingSeekSlider;
+        private int? _dragTrackVersion;
+        private int _renderedTrackVersion = -1;
 
         private Slider _volumeSlider;
         private TextBlock _volumeValueText;
@@ -107,6 +112,7 @@ namespace WindowsDynamicIsland.UI.Views
             _onSettingsChanged = onSettingsChanged;
 
             _media.MediaStateChanged += RefreshMediaUi;
+            _media.TimelineChanged += RefreshTimelineUi;
             _sys.VolumeStateChanged += OnVolumeStateChanged;
             _sys.KeyboardStateChanged += RefreshKeyboardUi;
             _sys.PowerStateChanged += RefreshPowerUi;
@@ -156,7 +162,7 @@ namespace WindowsDynamicIsland.UI.Views
             contentGrid.Children.Add(leftGrid);
 
             // Right Column: Keyboard Layout & Locks + Power Management & AI Watcher
-            var rightGrid = new Grid();
+            var rightGrid = _dashboardDetails = new Grid();
             rightGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             rightGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(8) });
             rightGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -172,6 +178,25 @@ namespace WindowsDynamicIsland.UI.Views
             Grid.SetColumn(rightGrid, 2);
             contentGrid.Children.Add(rightGrid);
 
+            _lyricsView = new TrackLyricsView(_media, _palette);
+            var lyricsLayout = new DockPanel();
+            var lyricsTitle = new TextBlock
+            {
+                Text = "Текст песни",
+                FontFamily = ThemeTokens.UiFont,
+                FontSize = 12,
+                Foreground = _palette.SecondaryText,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            DockPanel.SetDock(lyricsTitle, Dock.Top);
+            lyricsLayout.Children.Add(lyricsTitle);
+            lyricsLayout.Children.Add(_lyricsView);
+            _lyricsCard = ThemeTokens.CreateCard(_palette, 14, new Thickness(16, 13, 10, 12));
+            _lyricsCard.Child = lyricsLayout;
+            Grid.SetColumn(_lyricsCard, 2);
+            contentGrid.Children.Add(_lyricsCard);
+            UpdateLyricsVisibility();
+
             Grid.SetRow(contentGrid, 1);
             root.Children.Add(contentGrid);
 
@@ -179,7 +204,7 @@ namespace WindowsDynamicIsland.UI.Views
             _searchResultsPanel = new StackPanel();
             _searchResultsPopup = new Border
             {
-                Background = _palette.CardBackground,
+                Background = _palette.IsGlass ? ThemeTokens.MakeBrush(255, 31, 34, 43) : _palette.CardBackground,
                 BorderBrush = _palette.HairlineBorder,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(10),
@@ -866,7 +891,7 @@ namespace WindowsDynamicIsland.UI.Views
             headerTitleStack.Children.Add(VectorIcons.Create(VectorIcons.Music, _palette.SecondaryText, 12.5));
             headerTitleStack.Children.Add(new TextBlock
             {
-                Text = "Мультимедиа Windows",
+                Text = "Плеер",
                 FontFamily = ThemeTokens.UiFont,
                 FontSize = 11.5,
                 FontWeight = FontWeights.Medium,
@@ -877,27 +902,25 @@ namespace WindowsDynamicIsland.UI.Views
             Grid.SetColumn(headerTitleStack, 0);
             headerRow.Children.Add(headerTitleStack);
 
-            _mediaStatusText = new TextBlock
+            _lyricsButton = new Button
             {
-                Text = _media.IsPlaying ? "В ЭФИРЕ" : "ПАУЗА",
-                FontFamily = ThemeTokens.MonoFont,
-                FontSize = 9.5,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = _media.IsPlaying ? _palette.Positive : _palette.MutedText,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            _mediaStatusBadge = new Border
-            {
-                CornerRadius = new CornerRadius(5),
-                BorderThickness = new Thickness(1),
-                BorderBrush = _palette.HairlineBorder,
+                Content = "Текст песни",
+                Foreground = _palette.PrimaryText,
                 Background = _palette.RaisedBackground,
-                Padding = new Thickness(0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Child = ThemeTokens.WrapContentWithGlassLayers(_palette, _mediaStatusText, 5, false, new Thickness(7, 2, 7, 2))
+                BorderBrush = _palette.HairlineBorder,
+                FontFamily = ThemeTokens.UiFont,
+                FontSize = 11.5,
+                Padding = new Thickness(9, 3, 9, 3),
+                ToolTip = "Поиск текста в LRCLIB по названию и исполнителю"
             };
-            Grid.SetColumn(_mediaStatusBadge, 1);
-            headerRow.Children.Add(_mediaStatusBadge);
+            _lyricsButton.SetResourceReference(StyleProperty, "IslandPlayerButton");
+            _lyricsButton.Click += (s, e) =>
+            {
+                _showLyrics = !_showLyrics;
+                UpdateLyricsVisibility();
+            };
+            Grid.SetColumn(_lyricsButton, 1);
+            headerRow.Children.Add(_lyricsButton);
             Grid.SetRow(headerRow, 0);
             layoutGrid.Children.Add(headerRow);
 
@@ -928,6 +951,11 @@ namespace WindowsDynamicIsland.UI.Views
                 Stretch = Stretch.UniformToFill,
                 Visibility = Visibility.Collapsed
             };
+            coverGrid.SizeChanged += (s, e) =>
+            {
+                if (e.NewSize.Width > 0 && e.NewSize.Height > 0)
+                    coverGrid.Clip = new RectangleGeometry(new Rect(e.NewSize), 9, 9);
+            };
             coverGrid.Children.Add(_albumFallbackIcon);
             coverGrid.Children.Add(_albumImage);
             coverBox.Child = coverGrid;
@@ -957,17 +985,6 @@ namespace WindowsDynamicIsland.UI.Views
             };
             metaStack.Children.Add(_trackArtistText);
 
-            _trackSourceSubtitle = new TextBlock
-            {
-                Text = _media.IsPlaying ? "Активный аудиопоток • Системный плеер" : "Ожидание воспроизведения",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 10.5,
-                Foreground = _palette.MutedText,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                Margin = new Thickness(0, 3, 0, 0)
-            };
-            metaStack.Children.Add(_trackSourceSubtitle);
-
             Grid.SetColumn(metaStack, 2);
             topGrid.Children.Add(metaStack);
             Grid.SetRow(topGrid, 1);
@@ -975,25 +992,38 @@ namespace WindowsDynamicIsland.UI.Views
 
             // --- Row 2: Progress Bar + Timestamps ---
             var timelineStack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
-            _progressTrack = new Border
+            _seekSlider = new Slider
             {
-                Height = 5,
-                CornerRadius = new CornerRadius(2.5),
-                Background = _palette.RaisedBackground,
-                Margin = new Thickness(0, 0, 0, 4),
-                HorizontalAlignment = HorizontalAlignment.Stretch
+                IsMoveToPointEnabled = true,
+                SmallChange = 5,
+                LargeChange = 15,
+                Maximum = 0,
+                Margin = new Thickness(0, 0, 0, 3)
             };
-            _progressFill = new Border
+            System.Windows.Automation.AutomationProperties.SetName(_seekSlider, "Позиция воспроизведения, секунды");
+            ToolTipService.SetShowOnDisabled(_seekSlider, true);
+            _seekSlider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler((s, e) =>
             {
-                Height = 5,
-                CornerRadius = new CornerRadius(2.5),
-                Background = _palette.Accent,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Width = 0
+                _dragTrackVersion = _media.TrackVersion;
+            }));
+            _seekSlider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(async (s, e) =>
+            {
+                int? track = _dragTrackVersion;
+                _dragTrackVersion = null;
+                if (!e.Canceled && track == _media.TrackVersion)
+                    await SeekFromSliderAsync();
+                else
+                    RefreshTimelineUi();
+            }));
+            _seekSlider.ValueChanged += async (s, e) =>
+            {
+                if (_updatingSeekSlider) return;
+                if (_dragTrackVersion.HasValue)
+                    _timePositionText.Text = FormatMediaTime(TimeSpan.FromSeconds(e.NewValue));
+                else
+                    await SeekFromSliderAsync();
             };
-            _progressTrack.SizeChanged += (s, e) => UpdateMediaProgressWidth();
-            _progressTrack.Child = _progressFill;
-            timelineStack.Children.Add(_progressTrack);
+            timelineStack.Children.Add(_seekSlider);
 
             var timeGrid = new Grid();
             _timePositionText = new TextBlock
@@ -1012,6 +1042,13 @@ namespace WindowsDynamicIsland.UI.Views
                 Foreground = _palette.MutedText,
                 HorizontalAlignment = HorizontalAlignment.Right
             };
+            _seekStatus = new TextBlock
+            {
+                FontSize = 10,
+                Foreground = _palette.SecondaryText,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            timeGrid.Children.Add(_seekStatus);
             timeGrid.Children.Add(_timePositionText);
             timeGrid.Children.Add(_timeDurationText);
             timelineStack.Children.Add(timeGrid);
@@ -1026,60 +1063,43 @@ namespace WindowsDynamicIsland.UI.Views
             transportGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
             transportGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            var prevContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            prevContent.Children.Add(VectorIcons.Create(VectorIcons.SkipPrev, _palette.PrimaryText, 13));
-            prevContent.Children.Add(new TextBlock
-            {
-                Text = "Пред.",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.SecondaryText,
-                Margin = new Thickness(5, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            var prevBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                prevContent,
-                async () => await _media.SkipPreviousAsync(),
-                false, false, 8, new Thickness(10, 6, 10, 6), "Предыдущий трек");
-            Grid.SetColumn(prevBtn, 0);
-            transportGrid.Children.Add(prevBtn);
+            var previous = CreateTransportButton(VectorIcons.Create(VectorIcons.SkipPrev, _palette.PrimaryText, 15),
+                "Предыдущий трек", _media.SkipPreviousAsync);
+            Grid.SetColumn(previous, 0);
+            transportGrid.Children.Add(previous);
 
-            _playPauseIcon = VectorIcons.Create(_media.IsPlaying ? VectorIcons.Pause : VectorIcons.Play, _palette.OnAccentText, 14);
-            var playCenterHost = new Grid { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            playCenterHost.Children.Add(_playPauseIcon);
-            _playPauseBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                playCenterHost,
-                async () => await _media.TogglePlayPauseAsync(),
-                true, false, 8, new Thickness(16, 6, 16, 6), "Воспроизведение / Пауза");
-            Grid.SetColumn(_playPauseBtn, 2);
-            transportGrid.Children.Add(_playPauseBtn);
+            _playPauseIcon = VectorIcons.Create(_media.IsPlaying ? VectorIcons.Pause : VectorIcons.Play, _palette.OnAccentText, 16);
+            var playPause = CreateTransportButton(_playPauseIcon, "Воспроизведение / пауза", _media.TogglePlayPauseAsync, true);
+            Grid.SetColumn(playPause, 2);
+            transportGrid.Children.Add(playPause);
 
-            var nextContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            nextContent.Children.Add(new TextBlock
-            {
-                Text = "След.",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.SecondaryText,
-                Margin = new Thickness(0, 0, 5, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            nextContent.Children.Add(VectorIcons.Create(VectorIcons.SkipNext, _palette.PrimaryText, 13));
-            var nextBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                nextContent,
-                async () => await _media.SkipNextAsync(),
-                false, false, 8, new Thickness(10, 6, 10, 6), "Следующий трек");
-            Grid.SetColumn(nextBtn, 4);
-            transportGrid.Children.Add(nextBtn);
+            var next = CreateTransportButton(VectorIcons.Create(VectorIcons.SkipNext, _palette.PrimaryText, 15),
+                "Следующий трек", _media.SkipNextAsync);
+            Grid.SetColumn(next, 4);
+            transportGrid.Children.Add(next);
 
             Grid.SetRow(transportGrid, 3);
             layoutGrid.Children.Add(transportGrid);
 
             card.Child = layoutGrid;
             return card;
+        }
+
+        private Button CreateTransportButton(
+            UIElement icon, string label, Func<System.Threading.Tasks.Task> command, bool primary = false)
+        {
+            var button = new Button
+            {
+                Content = icon,
+                ToolTip = label,
+                Height = 29,
+                Background = primary ? _palette.Accent : _palette.RaisedBackground,
+                BorderBrush = primary ? _palette.Accent : _palette.HairlineBorder
+            };
+            button.SetResourceReference(StyleProperty, "IslandPlayerButton");
+            System.Windows.Automation.AutomationProperties.SetName(button, label);
+            button.Click += async (s, e) => await command();
+            return button;
         }
 
         private UIElement BuildVolumeCard()
@@ -1576,51 +1596,62 @@ namespace WindowsDynamicIsland.UI.Views
             }
         }
 
+        private void UpdateLyricsVisibility()
+        {
+            _dashboardDetails.Visibility = _showLyrics ? Visibility.Collapsed : Visibility.Visible;
+            _lyricsCard.Visibility = _showLyrics ? Visibility.Visible : Visibility.Collapsed;
+            _lyricsView.Visibility = _lyricsCard.Visibility;
+            _lyricsButton.Content = _showLyrics ? "Скрыть текст" : "Текст песни";
+        }
+
         private void RefreshMediaUi()
         {
             if (_trackTitleText == null) return;
+            if (_renderedTrackVersion != _media.TrackVersion)
+            {
+                _renderedTrackVersion = _media.TrackVersion;
+                _seekStatus.Text = string.Empty;
+            }
             _trackTitleText.Text = _media.Title;
             _trackArtistText.Text = _media.Artist;
-            if (_trackSourceSubtitle != null)
-            {
-                _trackSourceSubtitle.Text = _media.IsPlaying
-                    ? "Активный аудиопоток • Системный плеер"
-                    : "Воспроизведение на паузе";
-            }
-            if (_mediaStatusText != null)
-            {
-                _mediaStatusText.Text = _media.IsPlaying ? "В ЭФИРЕ" : "ПАУЗА";
-                _mediaStatusText.Foreground = _media.IsPlaying ? _palette.Positive : _palette.MutedText;
-            }
+            _albumImage.Source = _media.AlbumCover;
+            _albumImage.Visibility = _media.AlbumCover == null ? Visibility.Collapsed : Visibility.Visible;
+            _albumFallbackIcon.Visibility = _media.AlbumCover == null ? Visibility.Visible : Visibility.Collapsed;
+            _playPauseIcon.Data = Geometry.Parse(_media.IsPlaying ? VectorIcons.Pause : VectorIcons.Play);
+            RefreshTimelineUi();
+        }
 
-            if (_media.AlbumCover != null)
-            {
-                _albumImage.Source = _media.AlbumCover;
-                _albumImage.Visibility = Visibility.Visible;
-                _albumFallbackIcon.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                _albumImage.Visibility = Visibility.Collapsed;
-                _albumFallbackIcon.Visibility = Visibility.Visible;
-            }
+        private void RefreshTimelineUi()
+        {
+            if (_seekSlider == null) return;
+            _lyricsView?.Refresh();
+            if (_dragTrackVersion.HasValue) return;
 
-            if (_playPauseIcon != null)
+            _updatingSeekSlider = true;
+            try
             {
-                _playPauseIcon.Data = Geometry.Parse(_media.IsPlaying ? VectorIcons.Pause : VectorIcons.Play);
-                _playPauseIcon.Stroke = _palette.OnAccentText;
+                _seekSlider.Maximum = _media.Duration.TotalSeconds;
+                _seekSlider.Value = _media.Position.TotalSeconds;
+                _seekSlider.IsEnabled = _media.CanSeek;
+                _seekSlider.Opacity = _media.CanSeek ? 1.0 : 0.55;
+                _seekSlider.ToolTip = _media.CanSeek ? "Перемотка трека" : "Плеер не разрешает перемотку";
+            }
+            finally
+            {
+                _updatingSeekSlider = false;
             }
             _timePositionText.Text = FormatMediaTime(_media.Position);
             _timeDurationText.Text = FormatMediaTime(_media.Duration);
-            UpdateMediaProgressWidth();
         }
 
-        private void UpdateMediaProgressWidth()
+        private async System.Threading.Tasks.Task SeekFromSliderAsync()
         {
-            if (_progressTrack == null || _progressFill == null) return;
-            double totalW = _progressTrack.ActualWidth;
-            if (totalW <= 0) totalW = 220;
-            _progressFill.Width = Math.Max(0, Math.Min(totalW, totalW * _media.ProgressRatio));
+            int track = _media.TrackVersion;
+            _seekStatus.Text = string.Empty;
+            bool accepted = await _media.SeekAsync(TimeSpan.FromSeconds(_seekSlider.Value), track);
+            if (track == _media.TrackVersion && !accepted)
+                _seekStatus.Text = "Перемотка недоступна";
+            RefreshTimelineUi();
         }
 
         private static string FormatMediaTime(TimeSpan ts)

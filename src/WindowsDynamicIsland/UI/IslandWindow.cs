@@ -76,7 +76,6 @@ namespace WindowsDynamicIsland.UI
         private bool _isFullscreenRetracted;
         private DateTime _lastInteractionUtc = DateTime.UtcNow;
         private DateTime _lastWakeFromIdleUtc = DateTime.MinValue;
-        private DateTime _lastGlassCaptureUtc = DateTime.MinValue;
         private int _activeTabIndex;
 
         // Outer Capsule Visuals & Liquid Drop Top-Edge Fusion
@@ -85,10 +84,6 @@ namespace WindowsDynamicIsland.UI
         private ScaleTransform _dropScaleTransform;
         private TranslateTransform _dropTranslateTransform;
         private System.Windows.Shapes.Path _shadowPath;
-        private Grid _glassBackdropClipHost;
-        private Border _glassBackdropBlurLayer;
-        private ImageBrush _glassBackdropBrush;
-        private System.Windows.Media.Imaging.WriteableBitmap _glassCaptureBitmap;
         private System.Windows.Shapes.Path _liquidFillPath;
         private System.Windows.Shapes.Path _liquidInnerGlassRimPath;
         private System.Windows.Shapes.Path _liquidContourPath;
@@ -328,72 +323,12 @@ namespace WindowsDynamicIsland.UI
             _shadowPath = new System.Windows.Shapes.Path
             {
                 Fill = Brushes.Black,
+                Visibility = _palette.IsGlass ? Visibility.Collapsed : Visibility.Visible,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top,
                 IsHitTestVisible = false,
                 Effect = _shadowEffect
             };
-
-            // 2. iOS 26 Liquid Glass Frosted Backdrop Blur + Optical Dispersion Host (clipped to exact droplet silhouette!)
-            _glassBackdropBrush = new ImageBrush
-            {
-                Stretch = Stretch.UniformToFill
-            };
-            var glassOpaqueFallbackBase = new Border
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Background = CreateFallbackGlassBackdropBrush(),
-                IsHitTestVisible = false
-            };
-            _glassBackdropBlurLayer = new Border
-            {
-                Width = BaseExpandedWidth + 104.0,
-                Height = BaseExpandedHeight + 80.0,
-                Margin = new Thickness(-40.0),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Top,
-                Background = CreateFallbackGlassBackdropBrush(),
-                Effect = new BlurEffect
-                {
-                    Radius = 32.0,
-                    KernelType = KernelType.Gaussian,
-                    RenderingBias = RenderingBias.Performance
-                },
-                CacheMode = new BitmapCache(0.5),
-                IsHitTestVisible = false
-            };
-
-            var glassDispersionLayer = new Border
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                IsHitTestVisible = false,
-                Background = new RadialGradientBrush
-                {
-                    Center = new Point(0.35, 0.02),
-                    GradientOrigin = new Point(0.35, 0.02),
-                    RadiusX = 0.85,
-                    RadiusY = 0.85,
-                    GradientStops = new GradientStopCollection
-                    {
-                        new GradientStop(Color.FromArgb(62, 255, 255, 255), 0.0),
-                        new GradientStop(Color.FromArgb(22, 195, 225, 255), 0.45),
-                        new GradientStop(Color.FromArgb(30, 8, 12, 24), 1.0)
-                    }
-                }
-            };
-
-            _glassBackdropClipHost = new Grid
-            {
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
-                IsHitTestVisible = false,
-                Visibility = _palette.IsGlass ? Visibility.Visible : Visibility.Collapsed
-            };
-            _glassBackdropClipHost.Children.Add(glassOpaqueFallbackBase);
-            _glassBackdropClipHost.Children.Add(_glassBackdropBlurLayer);
-            _glassBackdropClipHost.Children.Add(glassDispersionLayer);
 
             // 3. _liquidFillPath renders the seamless droplet fill (including top concave meniscus ears)
             _liquidFillPath = new System.Windows.Shapes.Path
@@ -405,16 +340,16 @@ namespace WindowsDynamicIsland.UI
                 SnapsToDevicePixels = true
             };
 
-            // 4. _liquidInnerGlassRimPath adds the multi-layer iOS 26 inner refractive bevel along the droplet contour
+            // A clipped inner highlight follows the same animated contour.
             _liquidInnerGlassRimPath = new System.Windows.Shapes.Path
             {
                 Stroke = _palette.HairlineBorder,
-                StrokeThickness = 2.2,
+                StrokeThickness = 1.8,
                 Fill = null,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top,
                 IsHitTestVisible = false,
-                Opacity = 0.72,
+                Opacity = 0.85,
                 Visibility = _palette.IsGlass ? Visibility.Visible : Visibility.Collapsed
             };
 
@@ -495,7 +430,6 @@ namespace WindowsDynamicIsland.UI
                 VerticalAlignment = VerticalAlignment.Top
             };
             capsuleAndEarsGrid.Children.Add(_shadowPath);
-            capsuleAndEarsGrid.Children.Add(_glassBackdropClipHost);
             capsuleAndEarsGrid.Children.Add(_liquidFillPath);
             capsuleAndEarsGrid.Children.Add(_liquidInnerGlassRimPath);
             capsuleAndEarsGrid.Children.Add(_capsuleBorder);
@@ -1533,11 +1467,6 @@ namespace WindowsDynamicIsland.UI
             _isQuickNoteOpen = false;
             TriggerSmileyReaction(expanded ? SmileyReactionType.Expand : SmileyReactionType.Collapse);
 
-            if (_palette != null && _palette.IsGlass)
-            {
-                CaptureGlassDesktopBackdrop();
-            }
-
             // Enable GPU BitmapCache on _expandedLayer during spring morphing for 120Hz+ zero-layout-stutter fluidity
             if (_expandedLayer != null && _expandedLayer.CacheMode == null)
             {
@@ -1725,11 +1654,6 @@ namespace WindowsDynamicIsland.UI
             _lastWakeFromIdleUtc = DateTime.UtcNow;
             _hoverExpandTimer.Stop();
 
-            if (_palette != null && _palette.IsGlass)
-            {
-                CaptureGlassDesktopBackdrop();
-            }
-
             AnimateDropExtrusion(targetY: 0.0, targetScaleX: 1.0, targetScaleY: 1.0, targetOpacity: 1.0, durationMs: 260);
 
             var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(160))
@@ -1842,12 +1766,6 @@ namespace WindowsDynamicIsland.UI
             Geometry fillGeom = BuildLiquidDropGeometry(clampedW, clampedH, clampedR, ear, fusedTop, true);
             Geometry contourGeom = BuildLiquidDropGeometry(clampedW, clampedH, clampedR, ear, fusedTop, false);
 
-            if (_glassBackdropClipHost != null && _glassBackdropClipHost.Visibility == Visibility.Visible)
-            {
-                _glassBackdropClipHost.Width = clampedW + ear * 2.0;
-                _glassBackdropClipHost.Height = clampedH;
-                _glassBackdropClipHost.Clip = fillGeom;
-            }
             if (_liquidFillPath != null)
             {
                 _liquidFillPath.Data = fillGeom;
@@ -2056,93 +1974,6 @@ namespace WindowsDynamicIsland.UI
             _toastSmiley?.SetMood(mood);
         }
 
-        private static System.Windows.Media.Brush CreateFallbackGlassBackdropBrush()
-        {
-            return ThemeTokens.MakeLinearGradient(
-                new Point(0, 0), new Point(1, 1),
-                (0.0, Color.FromRgb(42, 68, 128)),
-                (0.35, Color.FromRgb(74, 48, 118)),
-                (0.70, Color.FromRgb(28, 86, 122)),
-                (1.0, Color.FromRgb(32, 44, 84)));
-        }
-
-        private void CaptureGlassDesktopBackdrop()
-        {
-            if (_hwnd == IntPtr.Zero || _glassBackdropBrush == null || _palette == null || !_palette.IsGlass)
-                return;
-
-            try
-            {
-                _lastGlassCaptureUtc = DateTime.UtcNow;
-                var screens = Screen.AllScreens;
-                if (screens == null || screens.Length == 0) return;
-
-                int idx = _settings.Current.SelectedMonitorIndex;
-                if (idx < 0 || idx >= screens.Length) idx = 0;
-                Screen targetScreen = screens[idx];
-
-                int capW = 708;
-                int capH = 408;
-                int srcX = targetScreen.Bounds.Left + (targetScreen.Bounds.Width - capW) / 2 + (int)_settings.Current.HorizontalOffsetPx;
-                int srcY = targetScreen.Bounds.Top + (int)_settings.Current.TopOffsetPx;
-
-                const int downW = 354;
-                const int downH = 204;
-
-                using (var screenBmp = new System.Drawing.Bitmap(capW, capH, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
-                {
-                    using (var g = System.Drawing.Graphics.FromImage(screenBmp))
-                    {
-                        g.CopyFromScreen(srcX, srcY, 0, 0, new System.Drawing.Size(capW, capH), System.Drawing.CopyPixelOperation.SourceCopy);
-                    }
-
-                    using (var smallBmp = new System.Drawing.Bitmap(downW, downH, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
-                    {
-                        using (var gs = System.Drawing.Graphics.FromImage(smallBmp))
-                        {
-                            gs.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
-                            gs.DrawImage(screenBmp, new System.Drawing.Rectangle(0, 0, downW, downH));
-                        }
-
-                        if (_glassCaptureBitmap == null || _glassCaptureBitmap.PixelWidth != downW || _glassCaptureBitmap.PixelHeight != downH)
-                        {
-                            _glassCaptureBitmap = new System.Windows.Media.Imaging.WriteableBitmap(downW, downH, 96, 96, PixelFormats.Pbgra32, null);
-                        }
-
-                        var bmpData = smallBmp.LockBits(
-                            new System.Drawing.Rectangle(0, 0, downW, downH),
-                            System.Drawing.Imaging.ImageLockMode.ReadOnly,
-                            System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-                        try
-                        {
-                            _glassCaptureBitmap.WritePixels(
-                                new Int32Rect(0, 0, downW, downH),
-                                bmpData.Scan0,
-                                bmpData.Stride * downH,
-                                bmpData.Stride);
-                        }
-                        finally
-                        {
-                            smallBmp.UnlockBits(bmpData);
-                        }
-                    }
-                }
-
-                _glassBackdropBrush.ImageSource = _glassCaptureBitmap;
-                if (_glassBackdropBlurLayer != null)
-                {
-                    _glassBackdropBlurLayer.Background = _glassBackdropBrush;
-                }
-            }
-            catch
-            {
-                if (_glassBackdropBlurLayer != null && _glassBackdropBrush.ImageSource == null)
-                {
-                    _glassBackdropBlurLayer.Background = CreateFallbackGlassBackdropBrush();
-                }
-            }
-        }
-
         private void OnIpcCommandReceived(string cmd)
         {
             if (string.IsNullOrWhiteSpace(cmd)) return;
@@ -2287,7 +2118,7 @@ namespace WindowsDynamicIsland.UI
                 {
                     if (_palette.IsGlass)
                     {
-                        // Rich desktop wallpaper backdrop so the frosted glass blur and multi-layer translucency are clearly visible
+                        // Sample wallpaper behind the translucent surface in the exported preview.
                         var glassWallpaper = ThemeTokens.MakeLinearGradient(
                             new Point(0, 0), new Point(1, 1),
                             (0.0, Color.FromRgb(32, 54, 108)),
@@ -2340,30 +2171,11 @@ namespace WindowsDynamicIsland.UI
                         : Color.FromArgb(120, 0, 0, 0));
                     Geometry shadowGeom = BuildLiquidDropGeometry(capW, capH, cornerR, 0.0, fusedTop, true, padX, padTop + 2);
                     var outerShadowGeom = new CombinedGeometry(GeometryCombineMode.Exclude, shadowGeom, fillGeom);
-                    dc.DrawGeometry(shadowBrush, null, outerShadowGeom);
+                    if (!_palette.IsGlass) dc.DrawGeometry(shadowBrush, null, outerShadowGeom);
 
                     // 2. Unified liquid-drop fill (surface + concave top ears as a single seamless vector shape)
                     var surfaceBrush = _liquidFillPath != null ? _liquidFillPath.Fill : _palette.CapsuleBackground;
                     dc.DrawGeometry(surfaceBrush, null, fillGeom);
-
-                    if (_palette.IsGlass)
-                    {
-                        // Optical iOS 26 top-left dispersion bloom inside the droplet
-                        var dispersion = new RadialGradientBrush
-                        {
-                            Center = new Point(0.35, 0.04),
-                            GradientOrigin = new Point(0.35, 0.04),
-                            RadiusX = 0.85,
-                            RadiusY = 0.85,
-                            GradientStops = new GradientStopCollection
-                            {
-                                new GradientStop(Color.FromArgb(66, 255, 255, 255), 0.0),
-                                new GradientStop(Color.FromArgb(24, 195, 228, 255), 0.45),
-                                new GradientStop(Color.FromArgb(28, 8, 12, 24), 1.0)
-                            }
-                        };
-                        dc.DrawGeometry(dispersion, null, fillGeom);
-                    }
 
                     // 3. Inner content clipped to droplet
                     dc.PushClip(fillGeom);
@@ -2379,7 +2191,7 @@ namespace WindowsDynamicIsland.UI
                     if (_palette.IsGlass)
                     {
                         dc.PushClip(fillGeom);
-                        var innerRimPen = new System.Windows.Media.Pen(_palette.HairlineBorder, 2.2);
+                        var innerRimPen = new System.Windows.Media.Pen(_palette.HairlineBorder, 1.8);
                         dc.DrawGeometry(null, innerRimPen, contourGeom);
                         dc.Pop();
                     }
@@ -2421,15 +2233,6 @@ namespace WindowsDynamicIsland.UI
                 SetFullscreenRetractedState(isFsOnThisMonitor);
             }
             if (_isFullscreenRetracted) return;
-
-            // Periodically refresh live desktop backdrop in iOS 26 Glass mode when not mid-animation
-            if (_palette != null && _palette.IsGlass && !_isIdleRetracted && !_animEngine.IsAnimating)
-            {
-                if ((DateTime.UtcNow - _lastGlassCaptureUtc).TotalMilliseconds >= 380)
-                {
-                    CaptureGlassDesktopBackdrop();
-                }
-            }
 
             // 2. Check cursor proximity to top edge / capsule
             System.Drawing.Point mousePt = System.Windows.Forms.Control.MousePosition;
@@ -2560,11 +2363,8 @@ namespace WindowsDynamicIsland.UI
                 _liquidInnerGlassRimPath.Stroke = _palette.HairlineBorder;
                 _liquidInnerGlassRimPath.Visibility = _palette.IsGlass ? Visibility.Visible : Visibility.Collapsed;
             }
-            if (_glassBackdropClipHost != null)
-            {
-                _glassBackdropClipHost.Visibility = _palette.IsGlass ? Visibility.Visible : Visibility.Collapsed;
-            }
-
+            if (_shadowPath != null)
+                _shadowPath.Visibility = _palette.IsGlass ? Visibility.Collapsed : Visibility.Visible;
             if (_shadowEffect != null)
             {
                 _shadowEffect.Color = _palette.ShadowColor;
@@ -2575,23 +2375,6 @@ namespace WindowsDynamicIsland.UI
             {
                 _specularTopLine.Background = _palette.SpecularTopRim;
                 _specularTopLine.Visibility = (fusedTop && !_palette.IsGlass) ? Visibility.Collapsed : Visibility.Visible;
-            }
-
-            if (_hwnd != IntPtr.Zero)
-            {
-                try
-                {
-                    NativeMethods.SetWindowDisplayAffinity(
-                        _hwnd,
-                        _palette.IsGlass ? NativeMethods.WDA_EXCLUDEFROMCAPTURE : NativeMethods.WDA_NONE);
-                }
-                catch
-                {
-                }
-                if (_palette.IsGlass)
-                {
-                    CaptureGlassDesktopBackdrop();
-                }
             }
 
             // Collapsed layer colors
@@ -2762,18 +2545,6 @@ namespace WindowsDynamicIsland.UI
             NativeMethods.AddClipboardFormatListener(_hwnd);
             RegisterGlobalHotkeys();
             PositionWindowOnSelectedMonitor();
-
-            if (_palette.IsGlass)
-            {
-                try
-                {
-                    NativeMethods.SetWindowDisplayAffinity(_hwnd, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
-                }
-                catch
-                {
-                }
-                CaptureGlassDesktopBackdrop();
-            }
 
             await _media.InitializeAsync();
             await _weather.RefreshAllAsync();
@@ -2974,7 +2745,11 @@ namespace WindowsDynamicIsland.UI
         {
             try
             {
+                _clockTimer?.Stop();
+                _hoverExpandTimer?.Stop();
+                _hoverCollapseTimer?.Stop();
                 _edgeAndIdleTimer?.Stop();
+                _media.Dispose();
                 if (_hwnd != IntPtr.Zero)
                 {
                     NativeMethods.RemoveClipboardFormatListener(_hwnd);

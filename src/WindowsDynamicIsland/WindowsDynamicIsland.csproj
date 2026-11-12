@@ -15,6 +15,7 @@
     <FrameworkPathOverride>C:\Windows\Microsoft.NET\Framework64\v4.0.30319</FrameworkPathOverride>
     <OutputPath>..\..\bin\$(Configuration)\</OutputPath>
     <IntermediateOutputPath>..\..\obj\WindowsDynamicIsland\$(Configuration)\</IntermediateOutputPath>
+    <WindowsMetadataPath Condition=" '$(WindowsMetadataPath)' == '' ">C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.26100.0\Windows.winmd</WindowsMetadataPath>
     <ApplicationIcon>..\..\assets\app.ico</ApplicationIcon>
     <NoWarn>1701;1702;CS8632</NoWarn>
   </PropertyGroup>
@@ -56,7 +57,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="Windows">
-      <HintPath>C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.26100.0\Windows.winmd</HintPath>
+      <HintPath>$(WindowsMetadataPath)</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="PresentationCore">
