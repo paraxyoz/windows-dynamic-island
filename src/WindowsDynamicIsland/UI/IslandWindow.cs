@@ -2030,6 +2030,20 @@ namespace WindowsDynamicIsland.UI
                 SetExpandedState(true);
                 _notesClockView?.ShowNotesList();
             }
+            else if (cmd.StartsWith("dotaconfig:", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    string path = System.IO.Path.GetFullPath(cmd.Substring(11).Trim());
+                    if (!string.Equals(System.IO.Path.GetFileName(path), "gamestate_integration_dynamic_island.cfg",
+                            StringComparison.OrdinalIgnoreCase)) return;
+                    string config = _sys.EnableDotaTelemetry();
+                    using (var file = new System.IO.FileStream(path, System.IO.FileMode.CreateNew))
+                    using (var writer = new System.IO.StreamWriter(file, new System.Text.UTF8Encoding(false)))
+                        writer.Write(config);
+                }
+                catch (Exception ex) { StorageService.LogError("ExportDotaConfig", ex); }
+            }
             else if (cmd.StartsWith("shot:", StringComparison.OrdinalIgnoreCase))
             {
                 string outPath = cmd.Substring(5).Trim();

@@ -75,6 +75,7 @@ namespace WindowsDynamicIsland.Models
         public int IdleRetractSeconds { get; set; } = 4;
         public bool ShowSystemNotifications { get; set; } = true;
         public bool WindowsNotificationListenerEnabled { get; set; }
+        public string DotaTelemetryToken { get; set; }
         public bool AutoStartWithWindows { get; set; } = false;
         public int SelectedMonitorIndex { get; set; } = 0;
         public bool HideInFullscreenApps { get; set; } = true;

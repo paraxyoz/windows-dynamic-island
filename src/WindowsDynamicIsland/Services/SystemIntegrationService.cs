@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using Windows.ApplicationModel;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 using WindowsDynamicIsland.Models;
@@ -64,6 +65,13 @@ namespace WindowsDynamicIsland.Services
         public bool IsNumLockOn => _numLockOn;
         public SystemAudioController Audio => _audioController;
         public WorkstationMonitor Workstation { get; }
+        public DotaTelemetry Dota { get; } = new DotaTelemetry();
+        private PackageCatalog _packageCatalog;
+        private bool _packageInstallingSubscribed, _packageUpdatingSubscribed;
+        private string _discordStatus;
+        private DateTime _discordReceived;
+        private bool? _discordMuted;
+        public string DiscordStatus => DateTime.UtcNow - _discordReceived < TimeSpan.FromSeconds(20) ? _discordStatus : null;
         private FileSystemWatcher _downloads;
         private readonly Dictionary<string, IslandEvent> _activeTasks = new Dictionary<string, IslandEvent>();
         public IReadOnlyCollection<IslandEvent> ActiveTasks => _activeTasks.Values;
@@ -106,6 +114,12 @@ namespace WindowsDynamicIsland.Services
             CheckKeyboardStateImmediate();
             StartIpcPipeServer();
             WatchDownloads();
+            StartPackageCatalog();
+            if (!string.IsNullOrWhiteSpace(_settings.Current.DotaTelemetryToken))
+            {
+                try { Dota.Start(_settings.Current.DotaTelemetryToken); }
+                catch (Exception ex) { StorageService.LogError("StartDotaTelemetry", ex); }
+            }
 
         }
 
@@ -264,6 +278,55 @@ namespace WindowsDynamicIsland.Services
                     Mood = caps ? SmileyMood.NotificationAlert : SmileyMood.Normal
                 });
             }
+        }
+
+        public string EnableDotaTelemetry()
+        {
+            string token = _settings.Current.DotaTelemetryToken;
+            if (string.IsNullOrWhiteSpace(token)) token = Guid.NewGuid().ToString("N");
+            Dota.Start(token);
+            if (token != _settings.Current.DotaTelemetryToken)
+            {
+                _settings.Current.DotaTelemetryToken = token;
+                _settings.Save();
+            }
+            return Dota.Config;
+        }
+
+        private void StartPackageCatalog()
+        {
+            try
+            {
+                _packageCatalog = PackageCatalog.OpenForCurrentUser();
+                _packageCatalog.PackageInstalling += OnPackageInstalling;
+                _packageInstallingSubscribed = true;
+                _packageCatalog.PackageUpdating += OnPackageUpdating;
+                _packageUpdatingSubscribed = true;
+            }
+            catch (Exception ex) { StorageService.LogError(nameof(StartPackageCatalog), ex); }
+        }
+
+        private void OnPackageInstalling(PackageCatalog sender, PackageInstallingEventArgs args) =>
+            ForwardPackageProgress(args.ActivityId, args.Package, args.Progress, args.IsComplete, args.ErrorCode, "Установка");
+
+        private void OnPackageUpdating(PackageCatalog sender, PackageUpdatingEventArgs args) =>
+            ForwardPackageProgress(args.ActivityId, args.TargetPackage, args.Progress, args.IsComplete, args.ErrorCode, "Обновление");
+
+        private void ForwardPackageProgress(Guid id, Package package, double progress, bool complete, Exception error, string action)
+        {
+            try
+            {
+                if (_disposed || package == null || package.IsFramework || package.IsResourcePackage ||
+                    package.Id.Name == "Paraxyoz.WindowsDynamicIsland") return;
+                string name = string.IsNullOrWhiteSpace(package.DisplayName) ? package.Id.Name : package.DisplayName;
+                int percent = complete ? (error == null ? 100 : -2) :
+                    double.IsNaN(progress) ? -1 : (int)Math.Round(Math.Min(0.99, Math.Max(0, progress)) * 100);
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    if (!_disposed) UpdateTask("package." + id.ToString("N"), percent, action + " · " + name);
+                }));
+            }
+            catch (Exception ex) { StorageService.LogError(nameof(ForwardPackageProgress), ex); }
         }
 
         private void WatchDownloads()
@@ -566,11 +629,39 @@ namespace WindowsDynamicIsland.Services
 
         private void HandleIpcPayload(string payload)
         {
+            if (payload.StartsWith("TELEGRAM:", StringComparison.Ordinal))
+            {
+                var fields = payload.Substring(9).Split(new[] { '|' }, 3);
+                if (fields.Length != 3 || fields[0].Length > 32 || string.IsNullOrWhiteSpace(fields[1]) ||
+                    fields[1].Length > 120 || fields[2].Length > 240) return;
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    var link = TelegramChatUri("@" + fields[0]);
+                    var item = new IslandEvent
+                    {
+                        EventType = IslandEventType.AppNotification, Priority = IslandEventPriority.High,
+                        Title = fields[1], Subtitle = fields[2], BadgeText = "Telegram",
+                        DurationMs = 8500, Mood = SmileyMood.NotificationAlert,
+                        PrimaryActionLabel = link == null ? "" : "Открыть чат"
+                    };
+                    if (link != null) item.PrimaryAction = () => TryOpenChat(link);
+                    _eventQueue.Enqueue(item);
+                }));
+                return;
+            }
+            if (payload.StartsWith("DISCORD:", StringComparison.Ordinal))
+            {
+                var discordParts = payload.Substring(8).Split(new[] { '|' }, 4);
+                if (discordParts.Length < 3 || discordParts[1].Length > 120 || discordParts[2].Length > 240) return;
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() => ApplyDiscord(discordParts[0], discordParts[1],
+                    discordParts[2], discordParts.Length == 4 ? discordParts[3] : null)));
+                return;
+            }
             if (payload.StartsWith("TASK:", StringComparison.Ordinal))
             {
                 var taskParts = payload.Substring(5).Split(new[] { '|' }, 3);
                 if (taskParts.Length != 3 || !Regex.IsMatch(taskParts[0], @"\A[A-Za-z0-9_.-]{1,48}\z") ||
-                    !int.TryParse(taskParts[1], out int percent) || percent < 0 || percent > 100 ||
+                    !TryTaskPercent(taskParts[1], out int percent) ||
                     string.IsNullOrWhiteSpace(taskParts[2]) || taskParts[2].Length > 160) return;
                 Application.Current?.Dispatcher?.BeginInvoke(new Action(() => UpdateTask(taskParts[0], percent, taskParts[2])));
                 return;
@@ -620,20 +711,68 @@ namespace WindowsDynamicIsland.Services
                 }));
         }
 
+        private static bool TryTaskPercent(string value, out int percent)
+        {
+            switch (value)
+            {
+                case "pending": percent = -1; return true;
+                case "failed": percent = -2; return true;
+                case "cancelled": percent = -3; return true;
+                default: return int.TryParse(value, out percent) && percent >= 0 && percent <= 100;
+            }
+        }
+
+        private void ApplyDiscord(string kind, string title, string body, string route)
+        {
+            if (kind == "voice")
+            {
+                if (title != "muted" && title != "unmuted" && title != "unknown") return;
+                bool wasCurrent = DiscordStatus != null;
+                bool? muted = title == "unknown" ? (bool?)null : title == "muted";
+                if (wasCurrent && muted.HasValue && _discordMuted.HasValue && muted != _discordMuted)
+                    ShowDiscord("Микрофон Discord", muted.Value ? "Выключен" : "Включён", false);
+                _discordMuted = muted;
+                _discordReceived = DateTime.UtcNow;
+                _discordStatus = "Discord · " + (muted == true ? "микрофон выключен" :
+                    muted == false ? "микрофон включён" : "голосовой статус недоступен") +
+                    (string.IsNullOrWhiteSpace(body) ? "" : " · " + body);
+            }
+            else if ((kind == "call" || kind == "message") && !string.IsNullOrWhiteSpace(title))
+                ShowDiscord(title, body, kind == "call", route);
+        }
+
+        private void ShowDiscord(string title, string body, bool call, string route = null)
+        {
+            var item = new IslandEvent
+            {
+                EventType = IslandEventType.AppNotification, Priority = call ? IslandEventPriority.High : IslandEventPriority.Normal,
+                Title = call ? "Входящий звонок · " + title : title, Subtitle = body,
+                BadgeText = "Discord", DurationMs = call ? 12000 : 5500, Mood = SmileyMood.NotificationAlert
+            };
+            if (route != null && Regex.IsMatch(route, @"\A(?:@me|[0-9]{17,22})/[0-9]{17,22}\z"))
+            {
+                item.PrimaryActionLabel = "Открыть Discord";
+                item.PrimaryAction = () => TryOpenChat(new Uri("https://discord.com/channels/" + route));
+            }
+            _eventQueue.Enqueue(item);
+        }
+
         private void UpdateTask(string id, int percent, string title)
         {
             bool existed = _activeTasks.TryGetValue(id, out var previous);
-            if (!existed && percent < 100 && _activeTasks.Count >= 24) return;
+            bool finished = percent == 100 || percent == -2 || percent == -3;
+            if (!existed && !finished && _activeTasks.Count >= 24) return;
             var item = new IslandEvent
             {
                 Id = "task:" + id, EventType = IslandEventType.TaskProgress, Priority = IslandEventPriority.Normal,
-                Title = title, Subtitle = percent == 100 ? "Завершено" : $"{percent}% выполнено",
-                BadgeText = "Задача", ProgressRatio = percent / 100.0,
+                Title = title, Subtitle = percent == 100 ? "Завершено" : percent == -2 ? "Ошибка" :
+                    percent == -3 ? "Отменено" : percent == -1 ? "Выполняется" : $"{percent}% выполнено",
+                BadgeText = "Задача", ProgressRatio = percent >= 0 ? (double?)percent / 100.0 : null,
                 DurationMs = 3500, Mood = percent == 100 ? SmileyMood.TaskCompleted : SmileyMood.Normal
             };
-            if (percent == 100) _activeTasks.Remove(id);
+            if (finished) _activeTasks.Remove(id);
             else _activeTasks[id] = item;
-            if (!existed || percent == 100 || _eventQueue.CurrentEvent == previous)
+            if (!existed || finished || _eventQueue.CurrentEvent == previous)
                 _eventQueue.Enqueue(item);
         }
 
@@ -772,6 +911,9 @@ namespace WindowsDynamicIsland.Services
             _notificationPoll?.Stop();
             if (_notificationListener != null && _notificationEventRegistered)
                 _notificationListener.NotificationChanged -= OnWindowsNotificationChanged;
+            if (_packageInstallingSubscribed) _packageCatalog.PackageInstalling -= OnPackageInstalling;
+            if (_packageUpdatingSubscribed) _packageCatalog.PackageUpdating -= OnPackageUpdating;
+            Dota.Dispose();
             _downloads?.Dispose();
             Workstation.Dispose();
             _audioController?.Dispose();

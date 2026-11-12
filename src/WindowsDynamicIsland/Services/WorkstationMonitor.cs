@@ -33,6 +33,8 @@ namespace WindowsDynamicIsland.Services
         private int _gamePid;
         private bool _disposed, _sampling, _bluetoothBusy;
         private DateTime _nextGpu;
+        private DateTime _nextFps;
+        private bool _samplingFps;
         private bool _batteryWarned;
         private string _outputId;
         private string _inputId;
@@ -49,6 +51,7 @@ namespace WindowsDynamicIsland.Services
         public string AudioOutput { get; private set; }
         public IReadOnlyCollection<string> BluetoothDevices => _bluetooth?.Values.ToArray() ?? Array.Empty<string>();
         public string Game { get; private set; }
+        public double? GameFps { get; private set; }
         public DateTime GameStarted { get; private set; }
         public bool DashboardVisible { get; set; }
 
@@ -82,6 +85,8 @@ namespace WindowsDynamicIsland.Services
                 }
 
                 DetectGame();
+                if (_gamePid != 0 && !_samplingFps && DateTime.UtcNow >= _nextFps)
+                    _ = SampleFpsAsync(_gamePid);
                 var output = SystemAudioController.ReadEndpoint(EDataFlow.eRender);
                 var microphone = SystemAudioController.ReadEndpoint(EDataFlow.eCapture);
                 if (_outputId != null && output.Id != null && _outputId != output.Id)
@@ -139,6 +144,8 @@ namespace WindowsDynamicIsland.Services
                         {
                             _gamePid = app.Id;
                             Game = name;
+                            GameFps = null;
+                            _nextFps = DateTime.MinValue;
                             GameStarted = app.StartTime;
                             Notify(IslandEventType.DeviceConnection, "Игровая сессия", name, "Игра");
                             return;
@@ -158,6 +165,23 @@ namespace WindowsDynamicIsland.Services
             catch (System.ComponentModel.Win32Exception) { }
             _gamePid = 0;
             Game = null;
+            GameFps = null;
+        }
+
+        private async Task SampleFpsAsync(int pid)
+        {
+            _samplingFps = true;
+            _nextFps = DateTime.UtcNow.AddSeconds(9);
+            try
+            {
+                var fps = await PresentMonSampler.SampleAsync(pid);
+                if (!_disposed && _gamePid == pid)
+                {
+                    GameFps = fps;
+                    Changed?.Invoke();
+                }
+            }
+            finally { _samplingFps = false; }
         }
 
         private async void SampleBluetooth(object sender, EventArgs args)

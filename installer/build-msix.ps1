@@ -1,5 +1,7 @@
 param(
-    [Parameter(Mandatory = $true)][string]$MakeAppxPath
+    [Parameter(Mandatory = $true)][string]$MakeAppxPath,
+    [string]$PresentMonPath,
+    [string]$PresentMonLicense
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +17,17 @@ try {
     Copy-Item (Join-Path $PSScriptRoot 'Package.appxmanifest') (Join-Path $staging 'AppxManifest.xml')
     Copy-Item (Join-Path $release 'WindowsDynamicIsland.exe'), (Join-Path $root 'assets\app.ico') $staging
     Copy-Item (Join-Path $root 'assets\Sounds') $assetDir -Recurse
+    if ($PresentMonPath) {
+        if (!$PresentMonLicense -or !(Test-Path -LiteralPath $PresentMonLicense)) {
+            throw 'Pass the upstream PresentMon LICENSE.txt as -PresentMonLicense.'
+        }
+        if ((Get-FileHash -LiteralPath $PresentMonPath).Hash -ne 'B2A706BC6AD475749E3B7E3409263AA1E6906D45BDCF993F6DBC0F660188F1AF') {
+            throw 'Expected the official PresentMon 2.6.0 x64 executable.'
+        }
+        $toolsDir = New-Item -ItemType Directory -Path (Join-Path $staging 'Tools')
+        Copy-Item -LiteralPath $PresentMonPath -Destination (Join-Path $toolsDir.FullName 'PresentMon.exe')
+        Copy-Item -LiteralPath $PresentMonLicense -Destination (Join-Path $toolsDir.FullName 'PresentMon-LICENSE.txt')
+    }
     Add-Type -AssemblyName System.Drawing
     $image = [System.Drawing.Image]::FromFile((Join-Path $root 'assets\logo.png'))
     try {

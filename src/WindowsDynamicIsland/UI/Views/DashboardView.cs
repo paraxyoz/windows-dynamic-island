@@ -84,6 +84,10 @@ namespace WindowsDynamicIsland.UI.Views
                     stack.Children.Add(metrics);
                     _game = Detail(stack, 17);
                     _devices = Detail(stack, 14);
+                    var dota = ActionButton("Настроить Dota 2", ConfigureDota);
+                    dota.HorizontalAlignment = HorizontalAlignment.Left;
+                    dota.Margin = new Thickness(0, 12, 0, 0);
+                    stack.Children.Add(dota);
                     break;
             }
             _body.Child = new ScrollViewer
@@ -125,12 +129,36 @@ namespace WindowsDynamicIsland.UI.Views
             Meter(_cpuBar, _monitor.CpuPercent ?? 0);
             Meter(_gpuBar, _monitor.GpuPercent ?? 0);
             _game.Text = _monitor.Game == null ? "Игровой режим · ожидание игры" :
-                $"{_monitor.Game} · {(DateTime.Now - _monitor.GameStarted):hh\\:mm\\:ss}";
+                $"{_monitor.Game} · {(DateTime.Now - _monitor.GameStarted):hh\\:mm\\:ss}" +
+                (_monitor.GameFps.HasValue ? $" · {_monitor.GameFps:0} FPS" : " · FPS пока недоступен");
+            if (_system.Dota.Summary != null) _game.Text += "\n" + _system.Dota.Summary;
             string battery = _monitor.BatteryPercent.HasValue
                 ? $"{_monitor.BatteryPercent}%{(_monitor.OnAc ? " · от сети" : "")}" : "данные недоступны";
             string mic = !_monitor.MicrophoneMuted.HasValue ? "не найден" : _monitor.MicrophoneMuted.Value ? "выключен" : "включён";
             string bluetooth = _monitor.BluetoothDevices.Count == 0 ? "нет данных об устройствах" : string.Join(", ", _monitor.BluetoothDevices);
-            _devices.Text = $"Батарея · {battery}\nСистемный микрофон · {mic}\nАудиовыход · {_monitor.AudioOutput ?? "не найден"}\nBluetooth · {bluetooth}";
+            _devices.Text = $"Батарея · {battery}\nСистемный микрофон · {mic}\nАудиовыход · {_monitor.AudioOutput ?? "не найден"}\nBluetooth · {bluetooth}\n{_system.DiscordStatus ?? "Discord · голосовой статус недоступен"}";
+        }
+
+        private void ConfigureDota()
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = "gamestate_integration_dynamic_island.cfg",
+                Filter = "Dota 2 (*.cfg)|*.cfg",
+                Title = "Сохраните файл в game/dota/cfg/gamestate_integration"
+            };
+            if (dialog.ShowDialog() != true) return;
+            try
+            {
+                string config = _system.EnableDotaTelemetry();
+                System.IO.File.WriteAllText(dialog.FileName, config, new UTF8Encoding(false));
+                MessageBox.Show("Добавьте -gamestateintegration в параметры запуска Dota 2.", "Dynamic Island");
+            }
+            catch (Exception ex)
+            {
+                StorageService.LogError(nameof(ConfigureDota), ex);
+                MessageBox.Show("Не удалось сохранить конфигурацию Dota 2.", "Dynamic Island");
+            }
         }
 
         private static string Percent(double? value) => value.HasValue ? $"{value:0}%" : "—";

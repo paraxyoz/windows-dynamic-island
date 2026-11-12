@@ -47,6 +47,8 @@ namespace WindowsDynamicIsland.Tests
 
             RunTest("11. Lyricsfile: реальные временные метки слов и переход на LRC", TestWordLyrics);
             RunTest("12. Telegram: адрес чата только из корректного имени пользователя", TestTelegramChatUri);
+            RunTest("13. Dota GSI: токен и данные матча", TestDotaTelemetry);
+            RunTest("14. PresentMon: FPS главной цепочки кадров", TestPresentMon);
 
             Console.WriteLine($"=== Итог тестов: Пройдено {_passed}, Ошибок {_failed} ===");
             return _failed == 0 ? 0 : 1;
@@ -123,6 +125,23 @@ plain: |
                 "Корректный username должен открывать чат Telegram");
             Assert(SystemIntegrationService.TelegramChatUri("Display Name") == null, "Из имени нельзя угадывать чат");
             Assert(SystemIntegrationService.TelegramChatUri("@example&start=123") == null, "Параметры из уведомления недопустимы");
+        }
+
+        private static void TestDotaTelemetry()
+        {
+            const string state = "{\"auth\":{\"token\":\"sample\"},\"map\":{\"matchid\":123,\"clock_time\":90,\"radiant_score\":7,\"dire_score\":5},\"hero\":{\"name\":\"npc_dota_hero_axe\"},\"player\":{\"kills\":2,\"deaths\":1,\"assists\":3}}";
+            Assert(!DotaTelemetry.TrySummarize(state, "other", out _), "Чужой токен должен отклоняться");
+            Assert(DotaTelemetry.TrySummarize(state, "sample", out var summary) && summary.Contains("Матч 123") &&
+                   summary.Contains("axe") && summary.Contains("Radiant 7 : 5 Dire") && summary.Contains("1:30"),
+                   "Поля матча должны отображаться из пакета GSI");
+        }
+
+        private static void TestPresentMon()
+        {
+            const string csv = "SwapChainAddress,MsBetweenPresents\nA,16\nB,200\nA,16\nA,16\nA,0\n";
+            Assert(Math.Abs((PresentMonSampler.ReadFps(csv) ?? 0) - 62.5) < 0.1, "FPS должен использовать только основную цепочку кадров");
+            Assert(PresentMonSampler.ReadFps("SwapChainAddress,MsBetweenPresents\nA,16\n") == null,
+                   "Слишком короткий захват не должен показывать FPS");
         }
 
         private static void TestStorageCrashRecovery()
