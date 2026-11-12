@@ -74,6 +74,7 @@ namespace WindowsDynamicIsland.Models
         public bool AutoRetractOnIdle { get; set; } = true;
         public int IdleRetractSeconds { get; set; } = 4;
         public bool ShowSystemNotifications { get; set; } = true;
+        public bool WindowsNotificationListenerEnabled { get; set; }
         public bool AutoStartWithWindows { get; set; } = false;
         public int SelectedMonitorIndex { get; set; } = 0;
         public bool HideInFullscreenApps { get; set; } = true;

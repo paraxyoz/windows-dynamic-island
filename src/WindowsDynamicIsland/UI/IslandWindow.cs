@@ -2489,7 +2489,8 @@ namespace WindowsDynamicIsland.UI
             RegisterGlobalHotkeys();
             PositionWindowOnSelectedMonitor();
 
-            _ = _sys.InitializeNotificationListenerAsync();
+            if (_settings.Current.WindowsNotificationListenerEnabled)
+                _ = _sys.InitializeNotificationListenerAsync();
             await _media.InitializeAsync();
             await _weather.RefreshAllAsync();
         }

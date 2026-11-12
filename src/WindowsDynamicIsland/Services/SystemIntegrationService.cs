@@ -303,10 +303,20 @@ namespace WindowsDynamicIsland.Services
                     _notificationPoll.Start();
                 }
                 _notificationsSupported = true;
+                if (!_settings.Current.WindowsNotificationListenerEnabled)
+                {
+                    _settings.Current.WindowsNotificationListenerEnabled = true;
+                    _settings.Save();
+                }
             }
             catch (Exception ex)
             {
                 NotificationAccessDetail = $"Windows не подключила уведомления (0x{ex.HResult:X8}).";
+                if (_settings.Current.WindowsNotificationListenerEnabled)
+                {
+                    _settings.Current.WindowsNotificationListenerEnabled = false;
+                    _settings.Save();
+                }
                 StorageService.LogError(nameof(InitializeNotificationListenerAsync), ex);
             }
             finally
