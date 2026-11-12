@@ -71,7 +71,7 @@ namespace WindowsDynamicIsland.UI.Views
             {
                 movement.BeginAnimation(TranslateTransform.YProperty, null);
                 if (IsVisible && SystemParameters.ClientAreaAnimation)
-                    movement.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -4, TimeSpan.FromSeconds(2.1))
+                    movement.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, -2.2, TimeSpan.FromSeconds(3.5))
                     {
                         AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever,
                         EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }

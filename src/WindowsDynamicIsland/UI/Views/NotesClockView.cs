@@ -45,6 +45,7 @@ namespace WindowsDynamicIsland.UI.Views
 
         // Timer UI (Compact Auxiliary Block 1)
         private TextBlock _timerDisplayLabel;
+        private ProgressBar _timerProgress;
         private TextBlock _timerStatusBadge;
         private TextBox _timerMinBox;
         private TextBox _timerSecBox;
@@ -54,6 +55,7 @@ namespace WindowsDynamicIsland.UI.Views
         private TextBlock _stopwatchDisplayLabel;
         private TextBlock _stopwatchStartPauseText;
         private StackPanel _lapsListPanel;
+        private int _renderedLapCount = -1;
 
         public NotesClockView(SettingsManager settings, NotesManager notes, TimerService timers, bool clockOnly = false)
         {
@@ -824,17 +826,19 @@ namespace WindowsDynamicIsland.UI.Views
             btnGrid.Children.Add(resetBtn);
 
             stack.Children.Clear();
-            var timerControls = new StackPanel();
-            timerControls.Children.Add(presetsGrid);
-            timerControls.Children.Add(btnGrid);
-            var surface = new DockPanel();
-            DockPanel.SetDock(header, Dock.Top);
-            DockPanel.SetDock(timerControls, Dock.Bottom);
-            surface.Children.Add(header);
-            surface.Children.Add(timerControls);
-            midGrid.VerticalAlignment = VerticalAlignment.Center;
-            surface.Children.Add(midGrid);
-            card.Child = surface;
+            stack.Children.Add(header);
+            stack.Children.Add(midGrid);
+            _timerProgress = new ProgressBar
+            {
+                Height = 4, Minimum = 0, Maximum = 1, Foreground = _palette.Accent,
+                Background = _palette.RaisedBackground, Margin = new Thickness(0, 0, 0, 15)
+            };
+            _timerProgress.SetResourceReference(StyleProperty, "IslandMeter");
+            stack.Children.Add(_timerProgress);
+            stack.Children.Add(presetsGrid);
+            stack.Children.Add(btnGrid);
+            stack.VerticalAlignment = VerticalAlignment.Center;
+            card.Child = stack;
             return card;
         }
 
@@ -1093,6 +1097,9 @@ namespace WindowsDynamicIsland.UI.Views
             if (_timerDisplayLabel != null)
             {
                 _timerDisplayLabel.Text = _timers.FormattedTimerRemaining;
+                if (_timerProgress != null)
+                    _timerProgress.Value = Math.Max(0, Math.Min(1,
+                        _timers.TimerRemaining.TotalSeconds / Math.Max(1, _timers.TimerTotalDuration.TotalSeconds)));
             }
             if (_timerStatusBadge != null)
             {
@@ -1117,7 +1124,7 @@ namespace WindowsDynamicIsland.UI.Views
                     ? "Пауза"
                     : (_timers.StopwatchElapsed > TimeSpan.Zero ? "Продолжить" : "Старт");
             }
-            if (_timers.Laps.Count != (_lapsListPanel?.Children.Count ?? 0))
+            if (_timers.Laps.Count != _renderedLapCount)
             {
                 RefreshStopwatchLaps();
             }
@@ -1127,16 +1134,15 @@ namespace WindowsDynamicIsland.UI.Views
         {
             if (_lapsListPanel == null) return;
             _lapsListPanel.Children.Clear();
+            _renderedLapCount = _timers.Laps.Count;
 
             if (_timers.Laps.Count == 0)
             {
-                _lapsListPanel.Children.Add(new TextBlock
+                _lapsListPanel.Children.Add(new Border
                 {
-                    Text = "Круги не зафиксированы",
-                    FontFamily = ThemeTokens.UiFont,
-                    FontSize = 10.5,
-                    Foreground = _palette.MutedText,
-                    Margin = new Thickness(0, 2, 0, 0)
+                    Padding = new Thickness(6, 30, 6, 18),
+                    Child = ThemeTokens.CreateEmptyState(_palette, VectorIcons.Clock, "Круги",
+                        "Запустите секундомер и нажмите «Круг», чтобы сохранить промежуточное время.")
                 });
                 return;
             }

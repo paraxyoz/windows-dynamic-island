@@ -13,7 +13,8 @@ namespace WindowsDynamicIsland.Models
         TimerFinished = 6,
         NoteReminder = 7,
         DeviceConnection = 8,
-        PowerCountdown = 9
+        PowerCountdown = 9,
+        TaskProgress = 10
     }
 
     public enum IslandEventPriority

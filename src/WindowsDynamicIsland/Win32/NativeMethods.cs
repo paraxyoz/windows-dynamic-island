@@ -316,6 +316,33 @@ namespace WindowsDynamicIsland.Win32
             }
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DeviceInterfaceFilter
+        {
+            public int Size;
+            public int DeviceType;
+            public int Reserved;
+            public Guid ClassGuid;
+            public short Name;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr RegisterDeviceNotification(IntPtr recipient, ref DeviceInterfaceFilter filter, int flags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool UnregisterDeviceNotification(IntPtr registration);
+
+        public static IntPtr RegisterUsbDeviceNotifications(IntPtr window)
+        {
+            var filter = new DeviceInterfaceFilter
+            {
+                Size = Marshal.SizeOf(typeof(DeviceInterfaceFilter)), DeviceType = 5,
+                ClassGuid = new Guid("A5DCBF10-6530-11D2-901F-00C04FB951ED")
+            };
+            return RegisterDeviceNotification(window, ref filter, 0);
+        }
+
         public static bool IsForegroundWindowFullscreen(IntPtr islandHwnd)
         {
             try

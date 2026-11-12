@@ -43,7 +43,8 @@ namespace WindowsDynamicIsland.Services
                                ev.EventType == IslandEventType.PowerCountdown;
 
             // 1. Coalesce identical transient event types (e.g. rapid volume changes or media play/pause spam)
-            if (CurrentEvent != null && CurrentEvent.EventType == ev.EventType && isTransient)
+            if (CurrentEvent != null && CurrentEvent.EventType == ev.EventType &&
+                (isTransient || (ev.EventType == IslandEventType.TaskProgress && ev.Id == CurrentEvent.Id)))
             {
                 CurrentEvent = ev;
                 _currentEventExpiresAt = DateTime.Now.AddMilliseconds(Math.Max(800, ev.DurationMs));

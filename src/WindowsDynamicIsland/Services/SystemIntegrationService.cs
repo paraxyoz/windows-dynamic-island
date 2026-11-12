@@ -63,6 +63,11 @@ namespace WindowsDynamicIsland.Services
         public bool IsCapsLockOn => _capsLockOn;
         public bool IsNumLockOn => _numLockOn;
         public SystemAudioController Audio => _audioController;
+        public WorkstationMonitor Workstation { get; }
+        private FileSystemWatcher _downloads;
+        private readonly Dictionary<string, IslandEvent> _activeTasks = new Dictionary<string, IslandEvent>();
+        public IReadOnlyCollection<IslandEvent> ActiveTasks => _activeTasks.Values;
+        public IReadOnlyList<string> ActiveDownloads { get; private set; } = Array.Empty<string>();
         public bool NotificationsListenerActive => _notificationsSupported;
         public string NotificationAccessDetail { get; private set; }
 
@@ -77,6 +82,12 @@ namespace WindowsDynamicIsland.Services
             _eventQueue = eventQueue;
             _audioController = new SystemAudioController();
             _audioController.VolumeChanged += OnHardwareVolumeChanged;
+            Workstation = new WorkstationMonitor(eventQueue);
+            Workstation.OutputChanged += () =>
+            {
+                _audioController.RebindOutput();
+                VolumeStateChanged?.Invoke(_audioController.GetVolumePercent(), _audioController.GetMuted());
+            };
 
             _keyboardHookDelegate = OnLowLevelKeyboardHook;
             InstallLowLevelKeyboardHook();
@@ -94,6 +105,7 @@ namespace WindowsDynamicIsland.Services
 
             CheckKeyboardStateImmediate();
             StartIpcPipeServer();
+            WatchDownloads();
 
         }
 
@@ -254,19 +266,77 @@ namespace WindowsDynamicIsland.Services
             }
         }
 
-        public void OnDeviceChanged(int eventType)
+        private void WatchDownloads()
+        {
+            try
+            {
+                var folder = new Guid("374DE290-123F-4565-9164-39C4925E467B");
+                if (SHGetKnownFolderPath(ref folder, 0, IntPtr.Zero, out IntPtr path) != 0) return;
+                string directory;
+                try { directory = Marshal.PtrToStringUni(path); }
+                finally { Marshal.FreeCoTaskMem(path); }
+                if (!Directory.Exists(directory)) return;
+                _downloads = new FileSystemWatcher(directory) { NotifyFilter = NotifyFilters.FileName };
+                _downloads.Created += (s, e) => { if (IsDownload(e.Name)) RefreshDownloads(); };
+                _downloads.Deleted += (s, e) => { if (IsDownload(e.Name)) RefreshDownloads(); };
+                _downloads.Renamed += (s, e) =>
+                {
+                    if (!IsDownload(e.OldName) && !IsDownload(e.Name)) return;
+                    RefreshDownloads();
+                    if (IsDownload(e.OldName) && !IsDownload(e.Name) && File.Exists(e.FullPath))
+                        Application.Current?.Dispatcher?.BeginInvoke(new Action(() => _eventQueue.Enqueue(new IslandEvent
+                        {
+                            EventType = IslandEventType.TaskProgress, Title = "Загрузка завершена", Subtitle = e.Name,
+                            BadgeText = "Загрузки", ProgressRatio = 1, DurationMs = 4500, Mood = SmileyMood.TaskCompleted
+                        })));
+                };
+                _downloads.EnableRaisingEvents = true;
+                RefreshDownloads();
+            }
+            catch (Exception ex) { StorageService.LogError(nameof(WatchDownloads), ex); }
+        }
+
+        private void RefreshDownloads()
+        {
+            try
+            {
+                var downloads = Directory.EnumerateFiles(_downloads.Path).Where(IsDownload).Take(20)
+                    .Select(Path.GetFileName).ToArray();
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() => ActiveDownloads = downloads));
+            }
+            catch (Exception ex) { StorageService.LogError(nameof(RefreshDownloads), ex); }
+        }
+
+        private static bool IsDownload(string name) =>
+            name != null && (name.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) ||
+                             name.EndsWith(".part", StringComparison.OrdinalIgnoreCase));
+
+        [DllImport("shell32.dll")]
+        private static extern int SHGetKnownFolderPath(ref Guid id, uint flags, IntPtr token, out IntPtr path);
+
+        public void OnDeviceChanged(int eventType, IntPtr data)
         {
             if (eventType != NativeMethods.DBT_DEVICEARRIVAL && eventType != NativeMethods.DBT_DEVICEREMOVECOMPLETE)
                 return;
 
             bool connected = eventType == NativeMethods.DBT_DEVICEARRIVAL;
+            int kind = data != IntPtr.Zero && Marshal.ReadInt32(data, 0) >= 12 ? Marshal.ReadInt32(data, 4) : 0;
+            bool isVolume = kind == 2 && Marshal.ReadInt32(data, 0) >= 20;
+            bool isUsb = kind == 5;
+            string drives = null;
+            if (isVolume)
+            {
+                int mask = Marshal.ReadInt32(data, 12);
+                drives = string.Join(", ", Enumerable.Range(0, 26).Where(i => (mask & (1 << i)) != 0).Select(i => $"{(char)('A' + i)}:"));
+            }
             _eventQueue?.Enqueue(new IslandEvent
             {
                 EventType = IslandEventType.DeviceConnection,
                 Priority = IslandEventPriority.Normal,
-                Title = connected ? "Устройство подключено" : "Устройство отключено",
-                Subtitle = "Системная шина периферии Windows",
-                BadgeText = connected ? "USB +" : "USB −",
+                Title = isVolume ? (connected ? "Накопитель подключён" : "Накопитель отключён") :
+                    (connected ? "Устройство подключено" : "Устройство отключено"),
+                Subtitle = string.IsNullOrEmpty(drives) ? "Периферия Windows" : drives,
+                BadgeText = isVolume ? "Диск" : isUsb ? "USB" : "Устройство",
                 DurationMs = 2000,
                 Mood = SmileyMood.NotificationAlert
             });
@@ -311,7 +381,9 @@ namespace WindowsDynamicIsland.Services
             }
             catch (Exception ex)
             {
-                NotificationAccessDetail = $"Windows не подключила уведомления (0x{ex.HResult:X8}).";
+                NotificationAccessDetail = ex.HResult == unchecked((int)0x803E0105) || ex.HResult == unchecked((int)0x800706BE)
+                    ? $"Служба уведомлений Windows недоступна (0x{ex.HResult:X8}). Локальные события острова работают."
+                    : $"Windows не подключила уведомления (0x{ex.HResult:X8}).";
                 if (_settings.Current.WindowsNotificationListenerEnabled)
                 {
                     _settings.Current.WindowsNotificationListenerEnabled = false;
@@ -379,6 +451,8 @@ namespace WindowsDynamicIsland.Services
                 }
                 string body = string.Join(" ", texts.Skip(1));
                 var chat = telegram ? TelegramChatUri(senderName) : null;
+                bool discordCall = messenger == "Discord" && Regex.IsMatch(senderName + " " + body,
+                    @"\bincoming call\b|\bis calling\b|входящий звонок|входящий вызов", RegexOptions.IgnoreCase);
 
                 Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
                 {
@@ -386,10 +460,10 @@ namespace WindowsDynamicIsland.Services
                     {
                         EventType = IslandEventType.AppNotification,
                         Priority = IslandEventPriority.High,
-                        Title = senderName,
+                        Title = discordCall ? "Входящий звонок · " + senderName : senderName,
                         Subtitle = string.IsNullOrWhiteSpace(body) ? "Новое уведомление" : body,
                         BadgeText = messenger ?? appName ?? "Windows",
-                        DurationMs = messenger != null ? 8500 : 5600,
+                        DurationMs = discordCall ? 12000 : messenger != null ? 8500 : 5600,
                         Mood = SmileyMood.NotificationAlert,
                         PrimaryActionLabel = chat != null ? "Открыть " + senderName : "Уведомления"
                     };
@@ -492,6 +566,28 @@ namespace WindowsDynamicIsland.Services
 
         private void HandleIpcPayload(string payload)
         {
+            if (payload.StartsWith("TASK:", StringComparison.Ordinal))
+            {
+                var taskParts = payload.Substring(5).Split(new[] { '|' }, 3);
+                if (taskParts.Length != 3 || !Regex.IsMatch(taskParts[0], @"\A[A-Za-z0-9_.-]{1,48}\z") ||
+                    !int.TryParse(taskParts[1], out int percent) || percent < 0 || percent > 100 ||
+                    string.IsNullOrWhiteSpace(taskParts[2]) || taskParts[2].Length > 160) return;
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() => UpdateTask(taskParts[0], percent, taskParts[2])));
+                return;
+            }
+            if (payload.StartsWith("AI:", StringComparison.Ordinal))
+            {
+                string name = payload.Substring(3).Trim();
+                if (name.Length == 0 || name.Length > 80) return;
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() => _eventQueue.Enqueue(new IslandEvent
+                {
+                    EventType = IslandEventType.AiTaskFinished, Priority = IslandEventPriority.High,
+                    Title = name + " завершил работу", Subtitle = "Задача завершена", BadgeText = "ИИ",
+                    DurationMs = 5000, Mood = SmileyMood.TaskCompleted
+                })));
+                return;
+            }
+
             if (payload.StartsWith("CMD:", StringComparison.OrdinalIgnoreCase))
             {
                 string cmd = payload.Substring(4).Trim();
@@ -522,6 +618,23 @@ namespace WindowsDynamicIsland.Services
                         Mood = SmileyMood.NotificationAlert
                     });
                 }));
+        }
+
+        private void UpdateTask(string id, int percent, string title)
+        {
+            bool existed = _activeTasks.TryGetValue(id, out var previous);
+            if (!existed && percent < 100 && _activeTasks.Count >= 24) return;
+            var item = new IslandEvent
+            {
+                Id = "task:" + id, EventType = IslandEventType.TaskProgress, Priority = IslandEventPriority.Normal,
+                Title = title, Subtitle = percent == 100 ? "Завершено" : $"{percent}% выполнено",
+                BadgeText = "Задача", ProgressRatio = percent / 100.0,
+                DurationMs = 3500, Mood = percent == 100 ? SmileyMood.TaskCompleted : SmileyMood.Normal
+            };
+            if (percent == 100) _activeTasks.Remove(id);
+            else _activeTasks[id] = item;
+            if (!existed || percent == 100 || _eventQueue.CurrentEvent == previous)
+                _eventQueue.Enqueue(item);
         }
 
         public static bool SendIpcNotification(string message)
@@ -659,6 +772,8 @@ namespace WindowsDynamicIsland.Services
             _notificationPoll?.Stop();
             if (_notificationListener != null && _notificationEventRegistered)
                 _notificationListener.NotificationChanged -= OnWindowsNotificationChanged;
+            _downloads?.Dispose();
+            Workstation.Dispose();
             _audioController?.Dispose();
         }
     }

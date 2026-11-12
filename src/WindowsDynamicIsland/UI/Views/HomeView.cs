@@ -1329,7 +1329,6 @@ namespace WindowsDynamicIsland.UI.Views
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 0: Header
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 1: Power Buttons
             layoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Row 2: Quick Tools Grid
-            layoutGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Row 3: Auto-Hide Status Bar
 
             var headerTitle = new TextBlock
             {
@@ -1423,110 +1422,50 @@ namespace WindowsDynamicIsland.UI.Views
             Grid.SetRow(powerHost, 1);
             layoutGrid.Children.Add(powerHost);
 
-            // --- Row 2: 3-Column Quick Productivity & Theme Shortcuts ---
-            var shortcutsGrid = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 6) };
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-            shortcutsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var noteShortcutContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            noteShortcutContent.Children.Add(VectorIcons.Create(VectorIcons.Notes, _palette.SecondaryText, 12));
-            noteShortcutContent.Children.Add(new TextBlock
+            var actions = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+            AddAction(VectorIcons.Notes, "Новая заметка", "Открыть редактор", () =>
             {
-                Text = "Новая заметка",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.PrimaryText,
-                Margin = new Thickness(4.5, 0, 0, 0)
+                if (_newNote != null) _newNote();
+                else _navigateToTab?.Invoke(3);
             });
-            var noteShortcutBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                noteShortcutContent,
-                () => { if (_newNote != null) _newNote(); else _navigateToTab?.Invoke(3); },
-                false, false, 7, new Thickness(6, 5, 6, 5), "Открыть раздел заметок");
-            Grid.SetColumn(noteShortcutBtn, 0);
-            shortcutsGrid.Children.Add(noteShortcutBtn);
-
-            var timerShortcutContent = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            timerShortcutContent.Children.Add(VectorIcons.Create(VectorIcons.Clock, _palette.SecondaryText, 12));
-            timerShortcutContent.Children.Add(new TextBlock
+            AddAction(VectorIcons.Clock, "Таймер", "Обратный отсчёт и секундомер", () => _navigateToTab?.Invoke(6));
+            var clipboardHint = AddAction(VectorIcons.Clipboard, "Последнее из буфера", "Скопировать последний фрагмент", () => { });
+            clipboardHint.Button.Click += (s, e) =>
             {
-                Text = "Таймер",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.PrimaryText,
-                Margin = new Thickness(4.5, 0, 0, 0)
-            });
-            var timerShortcutBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                timerShortcutContent,
-                () => _navigateToTab?.Invoke(6),
-                false, false, 7, new Thickness(6, 5, 6, 5), "Открыть таймер и секундомер");
-            Grid.SetColumn(timerShortcutBtn, 2);
-            shortcutsGrid.Children.Add(timerShortcutBtn);
-
-            var clipboardFeedback = new TextBlock { Text = "Из буфера", FontSize = 11 };
-            var clipboardShortcut = ThemeTokens.CreateInteractiveButton(_palette, clipboardFeedback,
-                () =>
+                var latest = _clipboard.Entries.OrderByDescending(entry => entry.CopiedAt).FirstOrDefault();
+                if (latest == null) _navigateToTab?.Invoke(1);
+                else
                 {
-                    var latest = _clipboard.Entries.OrderByDescending(entry => entry.CopiedAt).FirstOrDefault();
-                    if (latest == null) _navigateToTab?.Invoke(1);
-                    else
-                    {
-                        _clipboard.CopyEntryToSystemClipboard(latest);
-                        clipboardFeedback.Text = "Скопировано";
-                        ThemeTokens.Reveal(clipboardFeedback, 2, 150);
-                    }
-                }, padding: new Thickness(6), tooltip: "Вернуть последний фрагмент в буфер обмена");
-            Grid.SetColumn(clipboardShortcut, 4);
-            shortcutsGrid.Children.Add(clipboardShortcut);
-
-            Grid.SetRow(shortcutsGrid, 2);
-            layoutGrid.Children.Add(shortcutsGrid);
-
-            // --- Row 3: Auto-Retract Status Bar ---
-            var quickRow = new Grid();
-            quickRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            quickRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var quickLabelStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            quickLabelStack.Children.Add(VectorIcons.Create(VectorIcons.Settings, _palette.MutedText, 12.5));
-            var autoHideLabel = new TextBlock
-            {
-                Text = _settings.Current.AutoRetractOnIdle ? "Скрытие за край в покое: ВКЛ" : "Скрытие за край в покое: ВЫКЛ",
-                FontFamily = ThemeTokens.UiFont,
-                FontSize = 11,
-                Foreground = _palette.SecondaryText,
-                Margin = new Thickness(6, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center
+                    _clipboard.CopyEntryToSystemClipboard(latest);
+                    clipboardHint.Hint.Text = "Фрагмент в буфере";
+                    ThemeTokens.Reveal(clipboardHint.Hint, 2, 170);
+                }
             };
-            quickLabelStack.Children.Add(autoHideLabel);
-            Grid.SetColumn(quickLabelStack, 0);
-            quickRow.Children.Add(quickLabelStack);
+            Grid.SetRow(actions, 2);
+            layoutGrid.Children.Add(actions);
 
-            var toggleIdleBtn = ThemeTokens.CreateInteractiveButton(
-                _palette,
-                new TextBlock
+            (Button Button, TextBlock Hint) AddAction(string icon, string name, string description, Action action)
+            {
+                var line = new DockPanel();
+                var glyph = VectorIcons.Create(icon, _palette.SecondaryText, 14);
+                glyph.Margin = new Thickness(0, 0, 9, 0);
+                DockPanel.SetDock(glyph, Dock.Left);
+                line.Children.Add(glyph);
+                var labels = new StackPanel();
+                labels.Children.Add(new TextBlock { Text = name, Foreground = _palette.PrimaryText, FontSize = 12, FontWeight = FontWeights.SemiBold });
+                var hint = new TextBlock { Text = description, Foreground = _palette.SecondaryText, FontSize = 10.5, TextTrimming = TextTrimming.CharacterEllipsis };
+                labels.Children.Add(hint);
+                line.Children.Add(labels);
+                var button = new Button
                 {
-                    Text = _settings.Current.AutoRetractOnIdle ? "Активно" : "Включить",
-                    FontFamily = ThemeTokens.UiFont,
-                    FontSize = 10.5,
-                    Foreground = _palette.PrimaryText
-                },
-                () =>
-                {
-                    _settings.Current.AutoRetractOnIdle = !_settings.Current.AutoRetractOnIdle;
-                    _settings.Save();
-                    _onSettingsChanged?.Invoke();
-                },
-                false, false, 5, new Thickness(7, 3, 7, 3), "Прятать остров вверх за край экрана в бездействии, чтобы не мешать кликам в окнах");
-            Grid.SetColumn(toggleIdleBtn, 1);
-            quickRow.Children.Add(toggleIdleBtn);
-
-            Grid.SetRow(quickRow, 3);
-            layoutGrid.Children.Add(quickRow);
+                    Content = line, Background = _palette.RaisedBackground, Padding = new Thickness(10, 6, 10, 6),
+                    Margin = new Thickness(0, 0, 0, 5), HorizontalContentAlignment = HorizontalAlignment.Stretch
+                };
+                button.SetResourceReference(StyleProperty, "IslandPlayerButton");
+                button.Click += (s, e) => action();
+                actions.Children.Add(button);
+                return (button, hint);
+            }
 
             card.Child = layoutGrid;
             return card;

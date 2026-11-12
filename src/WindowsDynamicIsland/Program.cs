@@ -30,6 +30,10 @@ namespace WindowsDynamicIsland
             {
                 for (int i = 0; i < args.Length; i++)
                 {
+                    if (args[i] == "--task" && i + 3 < args.Length)
+                        return SystemIntegrationService.SendIpcNotification($"TASK:{args[i + 1]}|{args[i + 2]}|{args[i + 3]}") ? 0 : 1;
+                    if (args[i] == "--ai-done" && i + 1 < args.Length)
+                        return SystemIntegrationService.SendIpcNotification("AI:" + args[i + 1]) ? 0 : 1;
                     if (string.Equals(args[i], "--notify", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
                     {
                         SystemIntegrationService.SendIpcNotification(args[i + 1]);

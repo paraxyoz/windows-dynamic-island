@@ -159,6 +159,20 @@ namespace WindowsDynamicIsland.UI
         </Setter>
     </Style>
 
+    <Style x:Key=""IslandMeter"" TargetType=""{x:Type ProgressBar}"">
+        <Setter Property=""Template"">
+            <Setter.Value>
+                <ControlTemplate TargetType=""{x:Type ProgressBar}"">
+                    <Grid ClipToBounds=""True"">
+                        <Border x:Name=""PART_Track"" CornerRadius=""2"" Background=""{TemplateBinding Background}""/>
+                        <Border x:Name=""PART_Indicator"" HorizontalAlignment=""Left""
+                                CornerRadius=""2"" Background=""{TemplateBinding Foreground}""/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Minimal Slim Slider -->
     <Style TargetType=""{x:Type Slider}"">
         <Setter Property=""Height"" Value=""18""/>

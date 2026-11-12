@@ -35,6 +35,30 @@ namespace WindowsDynamicIsland.Win32
     {
         [PreserveSig]
         int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
+        [PreserveSig] int OpenPropertyStore(int access, [MarshalAs(UnmanagedType.Interface)] out IPropertyStore store);
+        [PreserveSig] int GetId([MarshalAs(UnmanagedType.LPWStr)] out string id);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct PropertyKey
+    {
+        public Guid Format;
+        public int Id;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    internal struct PropertyVariant
+    {
+        [FieldOffset(0)] public ushort Type;
+        [FieldOffset(8)] public IntPtr Pointer;
+    }
+
+    [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IPropertyStore
+    {
+        [PreserveSig] int GetCount(out uint count);
+        [PreserveSig] int GetAt(uint index, out PropertyKey key);
+        [PreserveSig] int GetValue(ref PropertyKey key, out PropertyVariant value);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -105,6 +129,58 @@ namespace WindowsDynamicIsland.Win32
                 _endpointVolume = null;
             }
         }
+
+        internal void RebindOutput()
+        {
+            try { _endpointVolume?.UnregisterControlChangeNotify(this); }
+            catch (COMException) { }
+            if (_endpointVolume != null) Marshal.ReleaseComObject(_endpointVolume);
+            _endpointVolume = null;
+            if (!_disposed) TryInitialize();
+        }
+
+        internal static (string Id, bool? Muted, string Name) ReadEndpoint(EDataFlow flow)
+        {
+            IMMDeviceEnumerator enumerator = null;
+            IMMDevice endpoint = null;
+            object volume = null;
+            try
+            {
+                enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+                if (enumerator.GetDefaultAudioEndpoint(flow, ERole.eMultimedia, out endpoint) != 0 || endpoint == null)
+                    return (null, null, null);
+                if (endpoint.GetId(out string id) != 0) return (null, null, null);
+                if (flow == EDataFlow.eRender) return (id, null, ReadDeviceName(endpoint));
+                var guid = typeof(IAudioEndpointVolume).GUID;
+                if (endpoint.Activate(ref guid, 23, IntPtr.Zero, out volume) == 0 &&
+                    volume is IAudioEndpointVolume level && level.GetMute(out bool muted) == 0)
+                    return (id, muted, null);
+                return (id, null, ReadDeviceName(endpoint));
+            }
+            catch (COMException) { return (null, null, null); }
+            finally
+            {
+                if (volume != null) Marshal.ReleaseComObject(volume);
+                if (endpoint != null) Marshal.ReleaseComObject(endpoint);
+                if (enumerator != null) Marshal.ReleaseComObject(enumerator);
+            }
+        }
+
+        private static string ReadDeviceName(IMMDevice endpoint)
+        {
+            if (endpoint.OpenPropertyStore(0, out IPropertyStore store) != 0 || store == null) return null;
+            try
+            {
+                var key = new PropertyKey { Format = new Guid("A45C254E-DF1C-4EFD-8020-67D146A850E0"), Id = 14 };
+                if (store.GetValue(ref key, out PropertyVariant value) != 0) return null;
+                try { return value.Type == 31 ? Marshal.PtrToStringUni(value.Pointer) : null; }
+                finally { PropVariantClear(ref value); }
+            }
+            finally { Marshal.ReleaseComObject(store); }
+        }
+
+        [DllImport("ole32.dll")]
+        private static extern int PropVariantClear(ref PropertyVariant value);
 
         public int GetVolumePercent()
         {

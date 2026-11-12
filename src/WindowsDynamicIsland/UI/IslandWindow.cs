@@ -45,7 +45,7 @@ namespace WindowsDynamicIsland.UI
         private const double BaseQuickNoteHeight = 236.0;
         private const double BaseToastWidth = 380.0;
         private const double BaseToastHeight = 52.0;
-        private const double BaseExpandedWidth = 730.0;
+        private const double BaseExpandedWidth = 770.0;
         private const double BaseExpandedHeight = 402.0;
 
         private readonly SettingsManager _settings;
@@ -60,6 +60,7 @@ namespace WindowsDynamicIsland.UI
         private readonly AnimationEngine _animEngine;
 
         private IntPtr _hwnd;
+        private IntPtr _usbNotifications;
         private NotifyIcon _trayIcon;
         private ThemePalette _palette;
         private AppThemeMode _lastAppliedTheme;
@@ -148,6 +149,7 @@ namespace WindowsDynamicIsland.UI
         private ShelfView _shelfView;
         private NotesClockView _notesClockView;
         private NotesClockView _clockView;
+        private DashboardView _dashboardView;
         private WeatherView _weatherView;
         private SettingsView _settingsView;
 
@@ -1019,7 +1021,7 @@ namespace WindowsDynamicIsland.UI
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            string[] tabNames = { "Главная", "Буфер", "Полка", "Заметки", "Погода", "Настройки", "Таймер" };
+            string[] tabNames = { "Главная", "Буфер", "Полка", "Заметки", "Погода", "Настройки", "Таймер", "Сводка" };
             string[] tabIcons =
             {
                 VectorIcons.Home,
@@ -1028,11 +1030,12 @@ namespace WindowsDynamicIsland.UI
                 VectorIcons.Notes,
                 VectorIcons.Weather,
                 VectorIcons.Settings,
-                VectorIcons.Clock
+                VectorIcons.Clock,
+                VectorIcons.Settings
             };
 
             _navTabButtons = new System.Windows.Controls.Button[tabNames.Length];
-            foreach (int tabIdx in new[] { 0, 1, 2, 3, 6, 4, 5 })
+            foreach (int tabIdx in new[] { 0, 1, 2, 3, 6, 4, 7, 5 })
             {
                 var btn = CreateStatefulNavTabButton(tabIdx, tabNames[tabIdx], tabIcons[tabIdx]);
                 _navTabButtons[tabIdx] = btn;
@@ -1284,6 +1287,8 @@ namespace WindowsDynamicIsland.UI
                         _weatherView = new WeatherView(_settings, _weather);
                     }
                     return _weatherView;
+                case 7:
+                    return _dashboardView ?? (_dashboardView = new DashboardView(_settings, _sys));
                 case 6:
                     if (_clockView == null)
                         _clockView = new NotesClockView(_settings, _notes, _timers, clockOnly: true);
@@ -1856,24 +1861,14 @@ namespace WindowsDynamicIsland.UI
         private void UpdateExpandedNotice(IslandEvent notification)
         {
             if (_expandedNotice == null) return;
-            if (!_isExpanded || notification?.EventType != IslandEventType.AppNotification || notification.PrimaryAction == null)
+            if (!_isExpanded || notification == null ||
+                (notification.EventType != IslandEventType.AppNotification && notification.EventType != IslandEventType.AiTaskFinished &&
+                 notification.EventType != IslandEventType.DeviceConnection && notification.EventType != IslandEventType.TaskProgress))
             {
                 _expandedNotice.Visibility = Visibility.Collapsed;
                 _expandedNotice.Child = null;
                 return;
             }
-            var action = new System.Windows.Controls.Button
-            {
-                Content = notification.PrimaryActionLabel,
-                Foreground = _palette.OnAccentText,
-                Background = _palette.Accent,
-                BorderBrush = _palette.Accent,
-                Padding = new Thickness(10, 5, 10, 5),
-                Margin = new Thickness(8, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            action.SetResourceReference(StyleProperty, "IslandPlayerButton");
-            action.Click += (sender, args) => notification.PrimaryAction();
             var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             labels.Children.Add(new TextBlock
             {
@@ -1890,19 +1885,41 @@ namespace WindowsDynamicIsland.UI
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
             var row = new DockPanel();
-            DockPanel.SetDock(action, Dock.Right);
-            row.Children.Add(action);
+            if (notification.PrimaryAction != null)
+            {
+                var action = new System.Windows.Controls.Button
+                {
+                    Content = notification.PrimaryActionLabel,
+                    Foreground = _palette.OnAccentText,
+                    Background = _palette.Accent,
+                    BorderBrush = _palette.Accent,
+                    Padding = new Thickness(10, 5, 10, 5),
+                    Margin = new Thickness(8, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                action.SetResourceReference(StyleProperty, "IslandPlayerButton");
+                action.Click += (sender, args) => notification.PrimaryAction();
+                DockPanel.SetDock(action, Dock.Right);
+                row.Children.Add(action);
+            }
+            if (notification.ProgressRatio.HasValue)
+                labels.Children.Add(new System.Windows.Controls.ProgressBar
+                {
+                    Maximum = 1, Value = notification.ProgressRatio.Value, Height = 3,
+                    Foreground = _palette.Accent, Margin = new Thickness(0, 5, 0, 0)
+                });
             row.Children.Add(labels);
             _expandedNotice.Background = _palette.IsLight ? Brushes.White : ThemeTokens.MakeBrush(255, 39, 43, 52);
             _expandedNotice.BorderThickness = new Thickness(1);
             _expandedNotice.BorderBrush = _palette.HairlineBorder;
             _expandedNotice.Child = row;
             _expandedNotice.Visibility = Visibility.Visible;
-            if (SystemParameters.ClientAreaAnimation)
-                _expandedNotice.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180))
-                {
-                    FillBehavior = FillBehavior.Stop
-                });
+            if (notification.EventType == IslandEventType.AiTaskFinished)
+                ThemeTokens.Reveal(_expandedNotice, 12, 290);
+            else if (notification.EventType == IslandEventType.DeviceConnection)
+                ThemeTokens.Reveal(_expandedNotice, 5, 180);
+            else if (notification.EventType != IslandEventType.TaskProgress)
+                ThemeTokens.Reveal(_expandedNotice, 7, 230);
         }
 
         private void OnMediaStateChanged()
@@ -2444,6 +2461,7 @@ namespace WindowsDynamicIsland.UI
                 _shelfView?.RebuildTheme();
                 _notesClockView?.RebuildTheme();
                 _clockView?.RebuildTheme();
+                _dashboardView?.RebuildTheme();
                 _weatherView?.RebuildTheme();
                 _settingsView?.RebuildTheme();
                 SwitchTab(_activeTabIndex);
@@ -2486,6 +2504,7 @@ namespace WindowsDynamicIsland.UI
             }
 
             NativeMethods.AddClipboardFormatListener(_hwnd);
+            _usbNotifications = NativeMethods.RegisterUsbDeviceNotifications(_hwnd);
             RegisterGlobalHotkeys();
             PositionWindowOnSelectedMonitor();
 
@@ -2608,7 +2627,7 @@ namespace WindowsDynamicIsland.UI
             }
             else if (msg == NativeMethods.WM_DEVICECHANGE)
             {
-                _sys.OnDeviceChanged(wParam.ToInt32());
+                _sys.OnDeviceChanged(wParam.ToInt32(), lParam);
             }
             else if (msg == NativeMethods.WM_DISPLAYCHANGE)
             {
@@ -2696,6 +2715,7 @@ namespace WindowsDynamicIsland.UI
                 _hoverCollapseTimer?.Stop();
                 _edgeAndIdleTimer?.Stop();
                 _media.Dispose();
+                if (_usbNotifications != IntPtr.Zero) NativeMethods.UnregisterDeviceNotification(_usbNotifications);
                 if (_hwnd != IntPtr.Zero)
                 {
                     NativeMethods.RemoveClipboardFormatListener(_hwnd);
